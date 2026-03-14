@@ -150,14 +150,14 @@ def main() -> None:
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size=8,
+        batch_size=16,
         shuffle=True,
         num_workers=0,
         collate_fn=collate_batch,
     )
     val_loader = DataLoader(
         val_dataset,
-        batch_size=8,
+        batch_size=16,
         shuffle=False,
         num_workers=0,
         collate_fn=collate_batch,
@@ -169,26 +169,35 @@ def main() -> None:
     class_weights = compute_class_weights(train_df)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = AdamW(model.parameters(), lr=2e-5)
+    scaler = torch.cuda.amp.GradScaler(enabled=torch.cuda.is_available())
 
     epochs = 3
     for epoch in range(epochs):
         model.train()
         train_loss_total = 0.0
 
-        for batch in train_loader:
+        for step, batch in enumerate(train_loader, start=1):
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
             speaker_embeddings = build_speaker_batch(batch["speakers"], device)
 
             optimizer.zero_grad()
-            logits = model(
-                {"input_ids": input_ids, "attention_mask": attention_mask},
-                speaker_embeddings,
-            )
-            loss = criterion(logits, labels)
-            loss.backward()
-            optimizer.step()
+            with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+                logits = model(
+                    {"input_ids": input_ids, "attention_mask": attention_mask},
+                    speaker_embeddings,
+                )
+                loss = criterion(logits, labels)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
+            if step % 200 == 0:
+                print(
+                    f"Epoch {epoch+1} Step {step}/{len(train_loader)} Loss {loss.item():.4f}"
+                )
 
             train_loss_total += loss.item()
 
