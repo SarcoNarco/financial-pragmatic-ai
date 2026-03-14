@@ -41,25 +41,22 @@ MODEL_OUTPUT_PATH = (
 
 
 class PragmaticIntentDataset(Dataset):
-    """Dataset that tokenizes text and returns speaker + intent labels."""
+    """Lazy-tokenization dataset using raw text and labels."""
 
-    def __init__(self, frame: pd.DataFrame, tokenizer, max_length: int = 128) -> None:
-        frame = frame.copy()
-        frame["text"] = frame["text"].fillna("").astype(str)
-        frame["speaker"] = frame["speaker"].fillna("EXECUTIVE").astype(str)
-        frame["intent"] = frame["intent"].fillna("GENERAL_UPDATE").astype(str)
-        frame = frame[frame["intent"].isin(INTENT_TO_INDEX)].reset_index(drop=True)
-        self.frame = frame
+    def __init__(self, frame: pd.DataFrame, tokenizer, max_length: int = 256) -> None:
+        frame = frame.reset_index(drop=True)
+        self.texts = frame["text"].tolist()
+        self.speakers = frame["speaker"].tolist()
+        self.label_ids = frame["intent"].map(INTENT_TO_INDEX).tolist()
         self.tokenizer = tokenizer
         self.max_length = max_length
 
     def __len__(self) -> int:
-        return len(self.frame)
+        return len(self.texts)
 
     def __getitem__(self, idx: int) -> Dict:
-        row = self.frame.iloc[idx]
         encoded = self.tokenizer(
-            row["text"],
+            self.texts[idx],
             truncation=True,
             padding="max_length",
             max_length=self.max_length,
@@ -68,8 +65,8 @@ class PragmaticIntentDataset(Dataset):
         return {
             "input_ids": encoded["input_ids"].squeeze(0),
             "attention_mask": encoded["attention_mask"].squeeze(0),
-            "speaker": row["speaker"],
-            "label": torch.tensor(INTENT_TO_INDEX[row["intent"]], dtype=torch.long),
+            "speaker": self.speakers[idx],
+            "label": torch.tensor(self.label_ids[idx], dtype=torch.long),
         }
 
 
@@ -135,6 +132,9 @@ def evaluate(
 
 def main() -> None:
     df = pd.read_csv(DATASET_PATH)
+    df["text"] = df["text"].fillna("").astype(str)
+    df["speaker"] = df["speaker"].fillna("EXECUTIVE").astype(str)
+    df["intent"] = df["intent"].fillna("GENERAL_UPDATE").astype(str)
     df = df[df["intent"].isin(INTENT_TO_INDEX)].reset_index(drop=True)
 
     train_df, val_df = train_test_split(
