@@ -1,5 +1,6 @@
 from financial_pragmatic_ai.analysis.transcript_analyzer import TranscriptAnalyzer
 from financial_pragmatic_ai.analysis.financial_signal_engine import FinancialSignalEngine
+from financial_pragmatic_ai.analysis.conversation_vectorizer import vectorize_conversation
 
 analyzer = TranscriptAnalyzer()
 
@@ -20,3 +21,8 @@ signals = engine.analyze(results)
 
 print("\nDetected financial signals:\n")
 print(signals)
+
+vector = vectorize_conversation(results)
+
+print("\nConversation vector:\n")
+print(vector)
