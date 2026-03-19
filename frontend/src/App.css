@@ -47,6 +47,21 @@ textarea {
   font-size: 14px;
 }
 
+.upload-section {
+  margin-top: 14px;
+  border: 1px solid #333;
+  background: #1e1e1e;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.upload-section input[type="file"] {
+  width: 100%;
+  margin-top: 4px;
+  color: #d4d4d4;
+  font-family: Consolas, "Fira Code", Menlo, Monaco, monospace;
+}
+
 button {
   margin-top: 12px;
   border: 0;

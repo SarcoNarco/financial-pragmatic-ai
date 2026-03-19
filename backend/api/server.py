@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -28,6 +28,33 @@ class TranscriptRequest(BaseModel):
 @app.post("/analyze")
 def analyze_transcript(request: TranscriptRequest):
     result = analyzer.analyze(request.transcript)
+    segments = result["segments"]
+    timeline = build_timeline(segments)
+    stats = compute_signal_stats(segments)
+    dominant_signal = result.get("dominant_signal")
+    if dominant_signal is None:
+        dominant_signal = result["aggregation"]["dominant_signal"]
+    insight = generate_insight(dominant_signal)
+
+    return {
+        "segments": segments,
+        "timeline": timeline,
+        "signal_stats": stats,
+        "signal": dominant_signal,
+        "insight": insight,
+    }
+
+
+@app.post("/upload")
+async def upload_transcript(file: UploadFile = File(...)):
+    content = await file.read()
+
+    try:
+        text = content.decode("utf-8")
+    except Exception:
+        return {"error": "File must be UTF-8 text"}
+
+    result = analyzer.analyze(text)
     segments = result["segments"]
     timeline = build_timeline(segments)
     stats = compute_signal_stats(segments)

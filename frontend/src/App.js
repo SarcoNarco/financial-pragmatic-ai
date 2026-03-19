@@ -10,6 +10,7 @@ CFO: We are monitoring cost structure carefully.`;
 
 function App() {
   const [transcript, setTranscript] = useState(SAMPLE);
+  const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
@@ -27,6 +28,41 @@ function App() {
       setError(
         err?.response?.data?.detail ||
           "Unable to analyze transcript. Ensure backend is running on 127.0.0.1:8000"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadFile = async () => {
+    if (!file) {
+      setError("Please select a .txt transcript file first.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await axios.post("http://127.0.0.1:8000/upload", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      if (response.data?.error) {
+        setResult(null);
+        setError(response.data.error);
+      } else {
+        setResult(response.data);
+      }
+    } catch (err) {
+      setResult(null);
+      setError(
+        err?.response?.data?.detail ||
+          "Unable to upload transcript. Ensure backend is running on 127.0.0.1:8000"
       );
     } finally {
       setLoading(false);
@@ -54,6 +90,19 @@ function App() {
         <button onClick={analyzeTranscript} disabled={loading || !transcript.trim()}>
           {loading ? "Analyzing..." : "Analyze"}
         </button>
+
+        <div className="upload-section">
+          <label htmlFor="file-upload">Upload Transcript (.txt)</label>
+          <input
+            id="file-upload"
+            type="file"
+            accept=".txt,text/plain"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+          <button onClick={uploadFile} disabled={loading || !file}>
+            {loading ? "Uploading..." : "Upload Transcript"}
+          </button>
+        </div>
         {error ? <p className="error">{error}</p> : null}
       </section>
 
