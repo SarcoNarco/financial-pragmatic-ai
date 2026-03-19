@@ -110,6 +110,9 @@ function App() {
           <span className="label">Insight</span>
           <span className="value">{result?.insight || "-"}</span>
         </div>
+        <h3>Risk Score</h3>
+        <p>{result ? `${result.risk_score}/100` : "-"}</p>
+        {result?.conflict ? <div style={{ color: "red" }}>⚠️ {result.conflict}</div> : null}
 
         <h3>Segments</h3>
         <pre>{JSON.stringify(result?.segments || [], null, 2)}</pre>

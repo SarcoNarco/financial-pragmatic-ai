@@ -3,7 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
-from financial_pragmatic_ai.analysis.financial_signal_engine import generate_advanced_insight
+from financial_pragmatic_ai.analysis.financial_signal_engine import (
+    compute_risk_score,
+    detect_conflict,
+    generate_advanced_insight,
+    normalize_score,
+)
 from financial_pragmatic_ai.analysis.signal_statistics import compute_signal_stats
 from financial_pragmatic_ai.analysis.timeline_builder import build_timeline
 
@@ -35,6 +40,9 @@ def analyze_transcript(request: TranscriptRequest):
     if dominant_signal is None:
         dominant_signal = result["aggregation"]["dominant_signal"]
     insight = generate_advanced_insight(segments)
+    score = compute_risk_score(segments)
+    risk_score = normalize_score(score)
+    conflict = detect_conflict(segments)
 
     return {
         "segments": segments,
@@ -42,6 +50,8 @@ def analyze_transcript(request: TranscriptRequest):
         "signal_stats": stats,
         "signal": dominant_signal,
         "insight": insight,
+        "risk_score": risk_score,
+        "conflict": conflict,
     }
 
 
@@ -84,6 +94,9 @@ async def upload_transcript(file: UploadFile = File(...)):
     if dominant_signal is None:
         dominant_signal = result["aggregation"]["dominant_signal"]
     insight = generate_advanced_insight(segments)
+    score = compute_risk_score(segments)
+    risk_score = normalize_score(score)
+    conflict = detect_conflict(segments)
 
     return {
         "segments": segments,
@@ -91,4 +104,6 @@ async def upload_transcript(file: UploadFile = File(...)):
         "signal_stats": stats,
         "signal": dominant_signal,
         "insight": insight,
+        "risk_score": risk_score,
+        "conflict": conflict,
     }
