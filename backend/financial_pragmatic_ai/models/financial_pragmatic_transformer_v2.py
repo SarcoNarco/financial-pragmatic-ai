@@ -17,6 +17,12 @@ class FinancialPragmaticTransformer(nn.Module):
 
     def __init__(self, num_intents: int = 4) -> None:
         super().__init__()
+        self.intent_labels = [
+            "EXPANSION",
+            "COST_PRESSURE",
+            "STRATEGIC_PROBING",
+            "GENERAL_UPDATE",
+        ]
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         self.finbert = AutoModel.from_pretrained(MODEL_NAME)
         self.pragmatic_input = PragmaticInputLayer()
@@ -52,13 +58,9 @@ class FinancialPragmaticTransformer(nn.Module):
     def predict(
         self,
         text: str,
-        speaker: str = "EXECUTIVE",
+        speaker: str,
         target_device: torch.device | None = None,
     ) -> str:
-        from financial_pragmatic_ai.training.train_pragmatic_transformer import (
-            INTENT_TO_INDEX,
-        )
-
         if target_device is None:
             target_device = next(self.parameters()).device
 
@@ -81,23 +83,28 @@ class FinancialPragmaticTransformer(nn.Module):
             )
 
         text_lower = text.lower()
-        if any(
-            word in text_lower
-            for word in [
-                "cost",
-                "expense",
-                "margin",
-                "pressure",
-                "decline",
-                "increase in costs",
-            ]
-        ):
-            boost_index = INTENT_TO_INDEX["COST_PRESSURE"]
-            logits[0][boost_index] += 2.0
+        cost_keywords = [
+            "cost",
+            "costs",
+            "expense",
+            "expenses",
+            "margin",
+            "pressure",
+            "decline",
+            "increase in costs",
+            "compression",
+        ]
 
-        index_to_intent = {index: label for label, index in INTENT_TO_INDEX.items()}
-        pred_idx = torch.argmax(logits, dim=-1).item()
-        return index_to_intent[pred_idx]
+        if speaker.upper() == "CFO" and any(k in text_lower for k in cost_keywords):
+            return "COST_PRESSURE"
+
+        if speaker.upper() == "ANALYST" and any(
+            k in text_lower for k in ["margin", "risk", "decline", "impact"]
+        ):
+            return "STRATEGIC_PROBING"
+
+        pred_idx = int(torch.argmax(logits, dim=-1).item())
+        return self.intent_labels[pred_idx]
 
 
 if __name__ == "__main__":
