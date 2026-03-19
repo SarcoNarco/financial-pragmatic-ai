@@ -15,6 +15,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const data = result;
+
+  const getColor = (score) => {
+    if (score > 70) return "#f44336";
+    if (score > 40) return "#ff9800";
+    return "#4caf50";
+  };
 
   const analyzeTranscript = async () => {
     setLoading(true);
@@ -71,80 +78,74 @@ function App() {
   };
 
   return (
-    <main className="app">
-      <section className="panel main-panel">
-        <h1>Financial Transcript Analyzer</h1>
-        <label htmlFor="transcript">Transcript Input</label>
-        <textarea
-          id="transcript"
-          value={transcript}
-          onChange={(e) => setTranscript(e.target.value)}
-          placeholder="Paste earnings call transcript here..."
-        />
-        <button onClick={analyzeTranscript} disabled={loading || !transcript.trim()}>
-          {loading ? "Analyzing..." : "Analyze"}
-        </button>
+    <div className="container">
+      <h1>Financial Transcript Analyzer</h1>
 
-        <div className="upload-section">
-          <label htmlFor="file-upload">Upload Transcript (.txt)</label>
-          <input
-            id="file-upload"
-            type="file"
-            accept=".txt,text/plain"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+      <div className="top-section">
+        <div className="left-panel">
+          <label htmlFor="transcript">Transcript Input</label>
+          <textarea
+            id="transcript"
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+            placeholder="Paste earnings call transcript here..."
           />
-          <button onClick={uploadFile} disabled={loading || !file}>
-            {loading ? "Uploading..." : "Upload Transcript"}
+          <button onClick={analyzeTranscript} disabled={loading || !transcript.trim()}>
+            {loading ? "Analyzing..." : "Analyze"}
           </button>
+
+          <div className="upload-section">
+            <label htmlFor="file-upload">Upload Transcript (.txt / .pdf)</label>
+            <input
+              id="file-upload"
+              type="file"
+              accept=".txt,.pdf,text/plain,application/pdf"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+            />
+            <button onClick={uploadFile} disabled={loading || !file}>
+              {loading ? "Uploading..." : "Upload Transcript"}
+            </button>
+          </div>
+          {error ? <p className="error">{error}</p> : null}
         </div>
-        {error ? <p className="error">{error}</p> : null}
-      </section>
 
-      <section className="panel result-panel">
-        <h2>Results</h2>
-        <div className="result-row">
-          <span className="label">Signal</span>
-          <span className="value">{result?.signal || "-"}</span>
+        <div className="right-panel">
+          <h2>Risk Overview</h2>
+          <h1 style={{ fontSize: "48px", color: getColor(data?.risk_score ?? 0) }}>
+            {data?.risk_score ?? "-"}
+          </h1>
+          <p>Risk Score</p>
+
+          <div className="result-row">
+            <span className="label">Signal</span>
+            <span className="value">{data?.signal || "-"}</span>
+          </div>
+          <div className="result-row">
+            <span className="label">Insight</span>
+            <span className="value">{data?.insight || "-"}</span>
+          </div>
+
+          {data?.conflict ? <div style={{ color: "red" }}>Warning: {data.conflict}</div> : null}
         </div>
-        <div className="result-row">
-          <span className="label">Insight</span>
-          <span className="value">{result?.insight || "-"}</span>
+      </div>
+
+      <div className="bottom-section">
+        <h2>Timeline Graph</h2>
+        <TimelineChart segments={data?.segments || []} />
+
+        <h2>Signal Heatmap</h2>
+        <SignalHeatmap segments={data?.segments || []} />
+
+        <h2>Segments</h2>
+        <div className="segment-list">
+          {(data?.segments || []).map((segment, index) => (
+            <div className="segment-item" key={`${segment.speaker}-${segment.intent}-${index}`} title={segment.text}>
+              {segment.speaker} - {segment.intent}
+            </div>
+          ))}
         </div>
-        <h3>Risk Score</h3>
-        <p>{result ? `${result.risk_score}/100` : "-"}</p>
-        {result?.conflict ? <div style={{ color: "red" }}>⚠️ {result.conflict}</div> : null}
-
-        <h3>Segments</h3>
-        <pre>{JSON.stringify(result?.segments || [], null, 2)}</pre>
-
-        {result ? (
-          <>
-            <h3>Conversation Timeline</h3>
-            {(result.timeline || []).map((item, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  gap: "20px",
-                  padding: "6px",
-                  borderBottom: "1px solid #333",
-                }}
-              >
-                <span>{item.time}</span>
-                <span>{item.speaker}</span>
-                <span>{item.intent}</span>
-              </div>
-            ))}
-
-            <h3>Timeline Graph</h3>
-            <TimelineChart segments={result.segments || []} />
-
-            <h3>Signal Heatmap</h3>
-            <SignalHeatmap segments={result.segments || []} />
-          </>
-        ) : null}
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
 
