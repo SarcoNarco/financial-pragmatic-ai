@@ -8,7 +8,7 @@
 
 body {
   margin: 0;
-  background: #1e1e1e;
+  background-color: #1e1e1e;
   color: #d4d4d4;
-  font-family: Consolas, "Fira Code", Menlo, Monaco, monospace;
+  font-family: "Fira Code", Consolas, Menlo, Monaco, monospace;
 }
