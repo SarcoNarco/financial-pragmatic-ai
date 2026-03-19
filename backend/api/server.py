@@ -48,11 +48,33 @@ def analyze_transcript(request: TranscriptRequest):
 @app.post("/upload")
 async def upload_transcript(file: UploadFile = File(...)):
     content = await file.read()
+    filename = file.filename.lower()
 
-    try:
-        text = content.decode("utf-8")
-    except Exception:
-        return {"error": "File must be UTF-8 text"}
+    if filename.endswith(".pdf"):
+        import io
+        import pdfplumber
+
+        try:
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                pages = []
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        pages.append(text)
+
+            text = "\n".join(pages)
+        except Exception as exc:
+            return {"error": f"PDF parsing failed: {str(exc)}"}
+    elif filename.endswith(".txt"):
+        try:
+            text = content.decode("utf-8")
+        except Exception:
+            return {"error": "TXT file must be UTF-8 encoded"}
+    else:
+        return {"error": "Only .txt and .pdf files are supported"}
+
+    text = text.replace("\n\n", "\n")
+    text = text.strip()
 
     result = analyzer.analyze(text)
     segments = result["segments"]
