@@ -1,12 +1,10 @@
 import re
 from signal import signal
 import torch
-from transformers import AutoTokenizer
 
 from financial_pragmatic_ai.models.financial_pragmatic_transformer_v2 import (
     FinancialPragmaticTransformer,
 )
-from financial_pragmatic_ai.models.speaker_embedding import get_speaker_embedding
 from financial_pragmatic_ai.analysis.conversation_vectorizer import vectorize_conversation
 from financial_pragmatic_ai.models.conversation_interaction_model import ConversationInteractionModel
 
@@ -20,8 +18,6 @@ INTENT_LABELS = [
     "STRATEGIC_PROBING",
     "GENERAL_UPDATE",
 ]
-
-tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
 
 
 class TranscriptAnalyzer:
@@ -69,29 +65,7 @@ class TranscriptAnalyzer:
         return segments
 
     def predict_intent(self, text, speaker):
-
-        encoded = tokenizer(
-            text,
-            truncation=True,
-            padding="max_length",
-            max_length=128,
-            return_tensors="pt",
-        )
-
-        input_ids = encoded["input_ids"].to(device)
-        attention_mask = encoded["attention_mask"].to(device)
-
-        speaker_embedding = get_speaker_embedding(speaker).to(device)
-
-        with torch.no_grad():
-            logits = self.model(
-                {"input_ids": input_ids, "attention_mask": attention_mask},
-                speaker_embedding,
-            )
-
-        pred = torch.argmax(logits, dim=-1).item()
-
-        return INTENT_LABELS[pred]
+        return self.model.predict(text, speaker=speaker, target_device=device)
 
     def predict_conversation_signal(self, intents):
 

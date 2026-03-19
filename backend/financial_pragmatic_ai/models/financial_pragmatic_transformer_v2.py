@@ -17,6 +17,7 @@ class FinancialPragmaticTransformer(nn.Module):
 
     def __init__(self, num_intents: int = 4) -> None:
         super().__init__()
+        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         self.finbert = AutoModel.from_pretrained(MODEL_NAME)
         self.pragmatic_input = PragmaticInputLayer()
         self.attention = PragmaticAttention()
@@ -48,16 +49,60 @@ class FinancialPragmaticTransformer(nn.Module):
         logits = self.classifier(attention_output)
         return logits
 
+    def predict(
+        self,
+        text: str,
+        speaker: str = "EXECUTIVE",
+        target_device: torch.device | None = None,
+    ) -> str:
+        from financial_pragmatic_ai.training.train_pragmatic_transformer import (
+            INTENT_TO_INDEX,
+        )
+
+        if target_device is None:
+            target_device = next(self.parameters()).device
+
+        encoded = self.tokenizer(
+            text,
+            truncation=True,
+            padding="max_length",
+            max_length=128,
+            return_tensors="pt",
+        )
+
+        input_ids = encoded["input_ids"].to(target_device)
+        attention_mask = encoded["attention_mask"].to(target_device)
+        speaker_embedding = get_speaker_embedding(speaker).to(target_device)
+
+        with torch.no_grad():
+            logits = self(
+                {"input_ids": input_ids, "attention_mask": attention_mask},
+                speaker_embedding,
+            )
+
+        text_lower = text.lower()
+        if any(
+            word in text_lower
+            for word in [
+                "cost",
+                "expense",
+                "margin",
+                "pressure",
+                "decline",
+                "increase in costs",
+            ]
+        ):
+            boost_index = INTENT_TO_INDEX["COST_PRESSURE"]
+            logits[0][boost_index] += 2.0
+
+        index_to_intent = {index: label for label, index in INTENT_TO_INDEX.items()}
+        pred_idx = torch.argmax(logits, dim=-1).item()
+        return index_to_intent[pred_idx]
+
 
 if __name__ == "__main__":
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = FinancialPragmaticTransformer(num_intents=4)
 
     sample_text = "We expect margin compression next quarter but demand remains strong."
-    text_tokens = tokenizer(sample_text, return_tensors="pt", truncation=True, padding=True)
-    speaker_emb = get_speaker_embedding("CEO")
-
-    with torch.no_grad():
-        output = model(text_tokens, speaker_emb)
-
-    print(f"Output shape: {tuple(output.shape)}")
+    predicted_intent = model.predict(sample_text, speaker="CEO")
+    print(f"Predicted intent: {predicted_intent}")
