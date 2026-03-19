@@ -1,5 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
+import { BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
 import "./App.css";
 
 const SAMPLE = `CEO: We plan to expand operations globally.
@@ -32,6 +33,13 @@ function App() {
     }
   };
 
+  const heatmapData = result
+    ? Object.entries(result.signal_stats || {}).map(([intent, count]) => ({
+        intent,
+        count,
+      }))
+    : [];
+
   return (
     <main className="app">
       <section className="panel main-panel">
@@ -62,6 +70,35 @@ function App() {
 
         <h3>Segments</h3>
         <pre>{JSON.stringify(result?.segments || [], null, 2)}</pre>
+
+        {result ? (
+          <>
+            <h3>Conversation Timeline</h3>
+            {(result.timeline || []).map((item, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  gap: "20px",
+                  padding: "6px",
+                  borderBottom: "1px solid #333",
+                }}
+              >
+                <span>{item.time}</span>
+                <span>{item.speaker}</span>
+                <span>{item.intent}</span>
+              </div>
+            ))}
+
+            <h3>Signal Heatmap</h3>
+            <BarChart width={600} height={300} data={heatmapData}>
+              <XAxis dataKey="intent" stroke="#d4d4d4" />
+              <YAxis stroke="#d4d4d4" />
+              <Tooltip />
+              <Bar dataKey="count" fill="#569cd6" />
+            </BarChart>
+          </>
+        ) : null}
       </section>
     </main>
   );

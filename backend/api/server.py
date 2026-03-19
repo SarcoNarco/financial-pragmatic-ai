@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
+from financial_pragmatic_ai.analysis.financial_insight_generator import generate_insight
+from financial_pragmatic_ai.analysis.signal_statistics import compute_signal_stats
+from financial_pragmatic_ai.analysis.timeline_builder import build_timeline
 
 
 app = FastAPI(title="Financial Pragmatic AI API")
@@ -25,8 +28,18 @@ class TranscriptRequest(BaseModel):
 @app.post("/analyze")
 def analyze_transcript(request: TranscriptRequest):
     result = analyzer.analyze(request.transcript)
+    segments = result["segments"]
+    timeline = build_timeline(segments)
+    stats = compute_signal_stats(segments)
+    dominant_signal = result.get("dominant_signal")
+    if dominant_signal is None:
+        dominant_signal = result["aggregation"]["dominant_signal"]
+    insight = generate_insight(dominant_signal)
+
     return {
-        "segments": result["segments"],
-        "signal": result["aggregation"]["dominant_signal"],
-        "insight": result["insight"],
+        "segments": segments,
+        "timeline": timeline,
+        "signal_stats": stats,
+        "signal": dominant_signal,
+        "insight": insight,
     }
