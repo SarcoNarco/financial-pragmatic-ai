@@ -1,4 +1,11 @@
 export default function SignalHeatmap({ segments }) {
+  const colorMap = {
+    EXPANSION: "#4caf50",
+    COST_PRESSURE: "#f44336",
+    STRATEGIC_PROBING: "#ff9800",
+    GENERAL_UPDATE: "#9e9e9e",
+  };
+
   const counts = {};
 
   segments.forEach((s) => {
@@ -13,7 +20,7 @@ export default function SignalHeatmap({ segments }) {
           style={{
             minWidth: "140px",
             padding: "20px",
-            background: "#1e1e1e",
+            background: colorMap[intent] || "#1e1e1e",
             border: "1px solid #333",
             borderRadius: "8px",
             textAlign: "center",
@@ -21,7 +28,7 @@ export default function SignalHeatmap({ segments }) {
           }}
           onClick={() => alert(intent)}
         >
-          <div style={{ fontSize: "12px", color: "#888" }}>{intent}</div>
+          <div style={{ fontSize: "12px", color: "#f5f5f5" }}>{intent}</div>
           <div style={{ fontSize: "20px", color: "#d4d4d4" }}>{count}</div>
         </div>
       ))}

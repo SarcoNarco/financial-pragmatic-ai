@@ -18,16 +18,16 @@ ChartJS.register(
   Legend
 );
 
-const intentMap = {
-  EXPANSION: 3,
-  COST_PRESSURE: 1,
-  STRATEGIC_PROBING: 2,
+const intentWeights = {
+  EXPANSION: 2,
+  COST_PRESSURE: -2,
+  STRATEGIC_PROBING: -1,
   GENERAL_UPDATE: 0,
 };
 
 export default function TimelineChart({ segments }) {
   const labels = segments.map((_, i) => `Step ${i}`);
-  const dataPoints = segments.map((s) => intentMap[s.intent] ?? 0);
+  const dataPoints = segments.map((s) => intentWeights[s.intent] ?? 0);
 
   const data = {
     labels,
@@ -66,12 +66,14 @@ export default function TimelineChart({ segments }) {
           color: "#d4d4d4",
           stepSize: 1,
           callback: (value) => {
-            const reverseMap = Object.entries(intentMap).find(([, v]) => v === value);
-            return reverseMap ? reverseMap[0] : "";
+            if (value === 2) return "Growth";
+            if (value === -2) return "Risk";
+            if (value === -1) return "Uncertainty";
+            return "Neutral";
           },
         },
-        min: 0,
-        max: 3,
+        min: -2,
+        max: 2,
         grid: { color: "#333" },
       },
     },

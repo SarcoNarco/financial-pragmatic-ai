@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
-from financial_pragmatic_ai.analysis.financial_insight_generator import generate_insight
+from financial_pragmatic_ai.analysis.financial_signal_engine import generate_advanced_insight
 from financial_pragmatic_ai.analysis.signal_statistics import compute_signal_stats
 from financial_pragmatic_ai.analysis.timeline_builder import build_timeline
 
@@ -34,7 +34,7 @@ def analyze_transcript(request: TranscriptRequest):
     dominant_signal = result.get("dominant_signal")
     if dominant_signal is None:
         dominant_signal = result["aggregation"]["dominant_signal"]
-    insight = generate_insight(dominant_signal)
+    insight = generate_advanced_insight(segments)
 
     return {
         "segments": segments,
@@ -83,7 +83,7 @@ async def upload_transcript(file: UploadFile = File(...)):
     dominant_signal = result.get("dominant_signal")
     if dominant_signal is None:
         dominant_signal = result["aggregation"]["dominant_signal"]
-    insight = generate_insight(dominant_signal)
+    insight = generate_advanced_insight(segments)
 
     return {
         "segments": segments,
