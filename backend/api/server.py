@@ -35,6 +35,8 @@ class TranscriptRequest(BaseModel):
 def analyze_transcript(request: TranscriptRequest):
     result = analyzer.analyze(request.transcript)
     segments = result["segments"]
+    if len(segments) == 0:
+        return {"error": "Could not parse transcript"}
     timeline = build_timeline(segments)
     stats = compute_signal_stats(segments)
     dominant_signal = result.get("dominant_signal")
@@ -91,6 +93,8 @@ async def upload_transcript(file: UploadFile = File(...)):
 
     result = analyzer.analyze(text)
     segments = result["segments"]
+    if len(segments) == 0:
+        return {"error": "Could not parse transcript"}
     timeline = build_timeline(segments)
     stats = compute_signal_stats(segments)
     dominant_signal = result.get("dominant_signal")

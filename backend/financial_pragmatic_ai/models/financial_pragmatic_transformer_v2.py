@@ -64,6 +64,9 @@ class FinancialPragmaticTransformer(nn.Module):
         if target_device is None:
             target_device = next(self.parameters()).device
 
+        if speaker.upper() == "UNKNOWN":
+            speaker = "EXECUTIVE"
+
         encoded = self.tokenizer(
             text,
             truncation=True,

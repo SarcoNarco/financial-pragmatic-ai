@@ -1,7 +1,6 @@
-import re
-from signal import signal
 import torch
 
+from financial_pragmatic_ai.analysis.transcript_parser import parse_transcript
 from financial_pragmatic_ai.models.financial_pragmatic_transformer_v2 import (
     FinancialPragmaticTransformer,
 )
@@ -34,36 +33,6 @@ class TranscriptAnalyzer:
             torch.load("financial_pragmatic_ai/models/conversation_signal_model.pt")
         )
         self.conversation_model.eval()
-
-    def parse_transcript(self, text):
-
-        lines = text.strip().split("\n")
-
-        segments = []
-
-        for line in lines:
-
-            line = line.strip()
-
-            if not line:
-                continue
-
-            if ":" not in line:
-                continue
-
-            speaker, content = line.split(":", 1)
-
-            speaker = speaker.strip().upper()
-
-            if speaker in ["CEO", "CFO", "ANALYST"]:
-
-                segments.append({
-                    "speaker": speaker,
-                    "text": content.strip()
-                })
-
-        return segments
-
     def predict_intent(self, text, speaker):
         return self.model.predict(text, speaker=speaker, target_device=device)
 
@@ -80,9 +49,9 @@ class TranscriptAnalyzer:
 
         return labels[pred]
 
-    def analyze(self, transcript):
-
-        segments = self.parse_transcript(transcript)
+    def analyze(self, raw_text):
+        segments = parse_transcript(raw_text)
+        print(f"Parsed {len(segments)} segments")
 
         results = []
 
