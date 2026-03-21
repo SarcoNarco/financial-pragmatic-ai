@@ -51,26 +51,18 @@ class TranscriptAnalyzer:
 
     def analyze(self, raw_text):
         segments = parse_transcript(raw_text)
-        print(f"Parsed {len(segments)} segments")
-
         results = []
 
         for seg in segments:
-
-            intent = self.predict_intent(
-                seg["text"],
-                seg["speaker"]
-            )
-
+            intent = self.model.predict(seg["text"], seg["speaker"])
             results.append({
                 "speaker": seg["speaker"],
                 "text": seg["text"],
                 "intent": intent
             })
 
-        signal = self.predict_conversation_signal(results)
+        print("[DEBUG] SAMPLE OUTPUT:")
+        for result in results[:5]:
+            print(result)
 
-        return {
-            "segments": results,
-            "financial_signal": signal
-        }
+        return results

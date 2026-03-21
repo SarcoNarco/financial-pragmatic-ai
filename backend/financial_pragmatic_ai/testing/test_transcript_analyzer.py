@@ -11,8 +11,8 @@ Analyst: How will this impact profitability going forward?
 
 analysis = analyzer.analyze(transcript)
 
-segments = analysis["segments"]
-signal = analysis["financial_signal"]
+segments = analysis
+signal = analyzer.predict_conversation_signal(segments)
 
 print("\nSegments:\n")
 

@@ -1,7 +1,19 @@
 import re
 
 
-SPEAKERS = ["CEO", "CFO", "ANALYST"]
+COMMON_EXECUTIVE_KEYWORDS = [
+    "revenue", "growth", "strategy", "market", "expansion", "expand",
+    "performance", "guidance"
+]
+
+CFO_KEYWORDS = [
+    "margin", "cost", "expense", "ebitda", "operating income",
+    "cash flow", "balance sheet"
+]
+
+ANALYST_KEYWORDS = [
+    "question", "how", "what", "why", "could you", "can you"
+]
 
 
 def clean_text(text: str) -> str:
@@ -10,46 +22,90 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def extract_speaker_segments(text: str):
+def extract_speaker_blocks(text: str):
     """
-    Extract structured segments from transcript.
-    Handles:
-    - CEO:
-    - CFO:
-    - Analyst:
+    Extract blocks using NAME: pattern
+    Works for:
+    Doug McMillon:
+    John Smith:
+    Operator:
     """
-    pattern = r"(CEO|CFO|Analyst)[\s,:-]+(.+?)(?=(CEO|CFO|Analyst|$))"
-    matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
+    pattern = (
+        r"([A-Z][a-z]+(?:\s[A-Z][a-z]+)*|[A-Z]{2,}(?:\s[A-Z]{2,})*):\s*(.+?)"
+        r"(?=(?:[A-Z][a-z]+(?:\s[A-Z][a-z]+)*|[A-Z]{2,}(?:\s[A-Z]{2,})*):|$)"
+    )
 
-    segments = []
+    matches = re.findall(pattern, text, re.DOTALL)
 
-    for match in matches:
-        speaker = match[0].upper()
-        content = match[1].strip()
+    blocks = []
 
-        if len(content) > 20:
-            segments.append({
-                "speaker": speaker,
-                "text": content,
-            })
+    for name, content in matches:
+        content = content.strip()
 
-    return segments
+        if len(content) < 40:
+            continue
+
+        blocks.append({
+            "name": name.strip(),
+            "text": content
+        })
+
+    return blocks
+
+
+def infer_role(name: str, text: str):
+    text_lower = text.lower()
+    name_lower = name.lower()
+
+    if "operator" in name_lower:
+        return "OPERATOR"
+
+    if "analyst" in name_lower:
+        return "ANALYST"
+
+    # Analyst detection (questions dominate Q&A)
+    if any(q in text_lower for q in ANALYST_KEYWORDS):
+        return "ANALYST"
+
+    # CFO detection (financial-heavy language)
+    if any(k in text_lower for k in CFO_KEYWORDS):
+        return "CFO"
+
+    # CEO / Exec detection (strategy-heavy language)
+    if any(k in text_lower for k in COMMON_EXECUTIVE_KEYWORDS):
+        return "CEO"
+
+    return "EXECUTIVE"
 
 
 def fallback_chunking(text: str):
     """
-    If no speakers detected, split into meaningful chunks.
+    If no speaker blocks found -> split into semantic chunks
     """
     sentences = re.split(r"[.!?]", text)
 
     chunks = []
+    buffer = ""
+
     for sentence in sentences:
         sentence = sentence.strip()
-        if len(sentence) > 30:
+        if not sentence:
+            continue
+
+        buffer += sentence + ". "
+
+        if len(buffer) > 120:
             chunks.append({
-                "speaker": "UNKNOWN",
-                "text": sentence,
+                "name": "UNKNOWN",
+                "text": buffer.strip()
             })
+            buffer = ""
+
+    if len(buffer.strip()) > 30:
+        chunks.append({
+            "name": "UNKNOWN",
+            "text": buffer.strip()
+        })
 
     return chunks
 
@@ -57,9 +113,22 @@ def fallback_chunking(text: str):
 def parse_transcript(text: str):
     text = clean_text(text)
 
-    segments = extract_speaker_segments(text)
+    blocks = extract_speaker_blocks(text)
 
-    if len(segments) == 0:
-        segments = fallback_chunking(text)
+    if len(blocks) == 0:
+        blocks = fallback_chunking(text)
+
+    segments = []
+
+    for block in blocks:
+        role = infer_role(block["name"], block["text"])
+
+        segments.append({
+            "speaker": role,
+            "name": block["name"],
+            "text": block["text"]
+        })
+
+    print(f"[DEBUG] Parsed {len(segments)} segments")
 
     return segments

@@ -37,6 +37,9 @@ def analyze_transcript(request: TranscriptRequest):
     segments = result["segments"]
     if len(segments) == 0:
         return {"error": "Could not parse transcript"}
+    warning = None
+    if len(segments) < 3:
+        warning = "Low confidence: insufficient structured data"
     timeline = build_timeline(segments)
     stats = compute_signal_stats(segments)
     dominant_signal = result.get("dominant_signal")
@@ -57,6 +60,7 @@ def analyze_transcript(request: TranscriptRequest):
         "risk_score": risk_score,
         "market_prediction": market_prediction,
         "conflict": conflict,
+        "warning": warning,
     }
 
 
@@ -95,6 +99,9 @@ async def upload_transcript(file: UploadFile = File(...)):
     segments = result["segments"]
     if len(segments) == 0:
         return {"error": "Could not parse transcript"}
+    warning = None
+    if len(segments) < 3:
+        warning = "Low confidence: insufficient structured data"
     timeline = build_timeline(segments)
     stats = compute_signal_stats(segments)
     dominant_signal = result.get("dominant_signal")
@@ -115,4 +122,5 @@ async def upload_transcript(file: UploadFile = File(...)):
         "risk_score": risk_score,
         "market_prediction": market_prediction,
         "conflict": conflict,
+        "warning": warning,
     }

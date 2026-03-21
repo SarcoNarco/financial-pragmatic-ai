@@ -1,3 +1,6 @@
+from financial_pragmatic_ai.analysis.market_predictor import predict_market_reaction
+
+
 intent_weights = {
     "EXPANSION": 2,
     "COST_PRESSURE": -3,
@@ -13,6 +16,13 @@ speaker_weights = {
 
 
 def compute_risk_score(segments):
+    unique_intents = set([x["intent"] for x in segments])
+    print("[DEBUG] Unique intents:", unique_intents)
+
+    if unique_intents == {"GENERAL_UPDATE"}:
+        print("[WARN] All intents are GENERAL_UPDATE. Using neutral score.")
+        return 0
+
     score = 0
 
     for segment in segments:
@@ -63,4 +73,3 @@ class FinancialSignalEngine:
 
     def analyze(self, intents):
         return generate_advanced_insight(intents)
-from financial_pragmatic_ai.analysis.market_predictor import predict_market_reaction

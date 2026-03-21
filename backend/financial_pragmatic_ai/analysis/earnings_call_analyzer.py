@@ -33,14 +33,17 @@ class EarningsCallAnalyzer:
         }
 
     def analyze(self, transcript):
-
-        base_analysis = self.transcript_analyzer.analyze(transcript)
-        segments = base_analysis["segments"]
+        segments = self.transcript_analyzer.analyze(transcript)
+        fallback_signal = (
+            self.transcript_analyzer.predict_conversation_signal(segments)
+            if segments
+            else "neutral"
+        )
 
         timeline_signals = self.timeline_analyzer.analyze_timeline(segments)
         aggregation = self.aggregate_signals(
             timeline_signals,
-            fallback_signal=base_analysis["financial_signal"]
+            fallback_signal=fallback_signal
         )
 
         insight = generate_insight(aggregation["dominant_signal"])
