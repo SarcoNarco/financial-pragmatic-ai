@@ -115,6 +115,8 @@ function App() {
             {data?.risk_score ?? "-"}
           </h1>
           <p>Risk Score</p>
+          <h3>Market Prediction</h3>
+          <p>{data?.market_prediction || "-"}</p>
 
           <div className="result-row">
             <span className="label">Signal</span>

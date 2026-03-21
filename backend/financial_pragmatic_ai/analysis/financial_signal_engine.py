@@ -27,6 +27,13 @@ def normalize_score(score):
     return max(0, min(100, 50 - score * 5))
 
 
+def compute_market_prediction(segments):
+    score = compute_risk_score(segments)
+    risk_score = normalize_score(score)
+    market_prediction = predict_market_reaction(risk_score)
+    return market_prediction
+
+
 def detect_conflict(segments):
     speakers = {x["speaker"]: x["intent"] for x in segments}
 
@@ -56,3 +63,4 @@ class FinancialSignalEngine:
 
     def analyze(self, intents):
         return generate_advanced_insight(intents)
+from financial_pragmatic_ai.analysis.market_predictor import predict_market_reaction

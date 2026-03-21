@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
 from financial_pragmatic_ai.analysis.financial_signal_engine import (
+    compute_market_prediction,
     compute_risk_score,
     detect_conflict,
     generate_advanced_insight,
@@ -42,6 +43,7 @@ def analyze_transcript(request: TranscriptRequest):
     insight = generate_advanced_insight(segments)
     score = compute_risk_score(segments)
     risk_score = normalize_score(score)
+    market_prediction = compute_market_prediction(segments)
     conflict = detect_conflict(segments)
 
     return {
@@ -51,6 +53,7 @@ def analyze_transcript(request: TranscriptRequest):
         "signal": dominant_signal,
         "insight": insight,
         "risk_score": risk_score,
+        "market_prediction": market_prediction,
         "conflict": conflict,
     }
 
@@ -96,6 +99,7 @@ async def upload_transcript(file: UploadFile = File(...)):
     insight = generate_advanced_insight(segments)
     score = compute_risk_score(segments)
     risk_score = normalize_score(score)
+    market_prediction = compute_market_prediction(segments)
     conflict = detect_conflict(segments)
 
     return {
@@ -105,5 +109,6 @@ async def upload_transcript(file: UploadFile = File(...)):
         "signal": dominant_signal,
         "insight": insight,
         "risk_score": risk_score,
+        "market_prediction": market_prediction,
         "conflict": conflict,
     }
