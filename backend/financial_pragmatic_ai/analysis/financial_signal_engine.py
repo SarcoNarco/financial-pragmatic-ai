@@ -1,5 +1,5 @@
 def compute_risk_score(intents):
-    score = 50
+    score = 45
 
     for item in intents:
         if item["intent"] == "COST_PRESSURE":
@@ -7,9 +7,9 @@ def compute_risk_score(intents):
         elif item["intent"] == "STRATEGIC_PROBING":
             score += 1
         elif item["intent"] == "EXPANSION":
-            score -= 2
+            score -= 1
 
-    return max(0, min(100, score))
+    return max(5, min(95, score))
 
 
 def derive_signal(score):

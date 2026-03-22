@@ -10,19 +10,22 @@ def extract_key_drivers(results, limit=5):
         if r["intent"] == "EXPANSION":
             growth.append(text)
 
-        # STRICT risk drivers (must contain negative indicators)
-        elif r["intent"] == "COST_PRESSURE" and any(
-            x in text_lower for x in [
-                "pressure",
-                "decline",
-                "risk",
-                "fall",
-                "compression",
-                "uncertainty",
-                "headwind"
-            ]
-        ):
-            risk.append(text)
+        elif r["intent"] == "COST_PRESSURE":
+
+            if (
+                any(x in text_lower for x in [
+                    "pressure",
+                    "decline",
+                    "risk",
+                    "loss",
+                    "drop",
+                    "uncertainty",
+                    "headwind",
+                    "compression"
+                ])
+                and len(r["text"].split()) > 8
+            ):
+                risk.append(text)
 
     return {
         "growth_drivers": growth[:limit],

@@ -110,6 +110,19 @@ class TranscriptAnalyzer:
                 elif any(
                     x in text_lower
                     for x in [
+                        "increase",
+                        "improvement",
+                        "growth of",
+                        "up by",
+                        "higher than",
+                        "better than expected",
+                        "improved performance"
+                    ]
+                ):
+                    intent = "EXPANSION"
+                elif any(
+                    x in text_lower
+                    for x in [
                         "cost pressure",
                         "margin pressure",
                         "decline",
