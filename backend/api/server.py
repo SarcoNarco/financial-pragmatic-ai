@@ -8,8 +8,8 @@ from financial_pragmatic_ai.analysis.financial_signal_engine import (
     compute_risk_score,
     detect_conflict,
     generate_advanced_insight,
-    normalize_score,
 )
+from financial_pragmatic_ai.analysis.insight_engine import extract_key_drivers
 from financial_pragmatic_ai.analysis.signal_statistics import compute_signal_stats
 from financial_pragmatic_ai.analysis.timeline_builder import build_timeline
 
@@ -34,30 +34,32 @@ class TranscriptRequest(BaseModel):
 @app.post("/analyze")
 def analyze_transcript(request: TranscriptRequest):
     result = analyzer.analyze(request.transcript)
-    segments = result["segments"]
-    if len(segments) == 0:
+    results = result["segments"]
+    if len(results) == 0:
         return {"error": "Could not parse transcript"}
     warning = None
-    if len(segments) < 3:
+    if len(results) < 3:
         warning = "Low confidence: insufficient structured data"
-    timeline = build_timeline(segments)
-    stats = compute_signal_stats(segments)
-    dominant_signal = result.get("dominant_signal")
-    if dominant_signal is None:
-        dominant_signal = result["aggregation"]["dominant_signal"]
-    insight = generate_advanced_insight(segments)
-    score = compute_risk_score(segments)
-    risk_score = normalize_score(score)
-    market_prediction = compute_market_prediction(segments)
-    conflict = detect_conflict(segments)
+    timeline = build_timeline(results)
+    stats = compute_signal_stats(results)
+    signal = result.get("dominant_signal")
+    if signal is None:
+        signal = result["aggregation"]["dominant_signal"]
+    score = compute_risk_score(results)
+    insight = generate_advanced_insight(results)
+    drivers = extract_key_drivers(results)
+    market_prediction = compute_market_prediction(results)
+    conflict = detect_conflict(results)
 
     return {
-        "segments": segments,
+        "segments": results,
+        "signal": signal,
+        "score": score,
+        "insight": insight,
+        "drivers": drivers,
         "timeline": timeline,
         "signal_stats": stats,
-        "signal": dominant_signal,
-        "insight": insight,
-        "risk_score": risk_score,
+        "risk_score": score,
         "market_prediction": market_prediction,
         "conflict": conflict,
         "warning": warning,
@@ -96,30 +98,32 @@ async def upload_transcript(file: UploadFile = File(...)):
     text = text.strip()
 
     result = analyzer.analyze(text)
-    segments = result["segments"]
-    if len(segments) == 0:
+    results = result["segments"]
+    if len(results) == 0:
         return {"error": "Could not parse transcript"}
     warning = None
-    if len(segments) < 3:
+    if len(results) < 3:
         warning = "Low confidence: insufficient structured data"
-    timeline = build_timeline(segments)
-    stats = compute_signal_stats(segments)
-    dominant_signal = result.get("dominant_signal")
-    if dominant_signal is None:
-        dominant_signal = result["aggregation"]["dominant_signal"]
-    insight = generate_advanced_insight(segments)
-    score = compute_risk_score(segments)
-    risk_score = normalize_score(score)
-    market_prediction = compute_market_prediction(segments)
-    conflict = detect_conflict(segments)
+    timeline = build_timeline(results)
+    stats = compute_signal_stats(results)
+    signal = result.get("dominant_signal")
+    if signal is None:
+        signal = result["aggregation"]["dominant_signal"]
+    score = compute_risk_score(results)
+    insight = generate_advanced_insight(results)
+    drivers = extract_key_drivers(results)
+    market_prediction = compute_market_prediction(results)
+    conflict = detect_conflict(results)
 
     return {
-        "segments": segments,
+        "segments": results,
+        "signal": signal,
+        "score": score,
+        "insight": insight,
+        "drivers": drivers,
         "timeline": timeline,
         "signal_stats": stats,
-        "signal": dominant_signal,
-        "insight": insight,
-        "risk_score": risk_score,
+        "risk_score": score,
         "market_prediction": market_prediction,
         "conflict": conflict,
         "warning": warning,

@@ -19,6 +19,28 @@ INTENT_LABELS = [
 ]
 
 
+def smooth_intents(results, window=5):
+    smoothed = []
+
+    for i in range(len(results)):
+        window_slice = results[max(0, i - window): i + window + 1]
+
+        weights = {}
+        for j, result in enumerate(window_slice):
+            distance = abs(i - (max(0, i - window) + j))
+            weight = 1 / (distance + 1)
+            weights[result["intent"]] = weights.get(result["intent"], 0) + weight
+
+        dominant = max(weights, key=weights.get)
+
+        smoothed.append({
+            **results[i],
+            "intent": dominant
+        })
+
+    return smoothed
+
+
 class TranscriptAnalyzer:
 
     def __init__(self):
@@ -55,11 +77,33 @@ class TranscriptAnalyzer:
 
         for seg in segments:
             intent = self.model.predict(seg["text"], seg["speaker"])
+            text_lower = seg["text"].lower()
+
+            # Override weak GENERAL_UPDATE predictions
+            if intent == "GENERAL_UPDATE":
+                if any(
+                    x in text_lower
+                    for x in ["growth", "increase", "expand", "strong", "up", "record", "improved"]
+                ):
+                    intent = "EXPANSION"
+                elif any(
+                    x in text_lower
+                    for x in ["cost", "pressure", "decline", "risk", "margin", "inflation", "headwind"]
+                ):
+                    intent = "COST_PRESSURE"
+                elif any(
+                    x in text_lower
+                    for x in ["how", "what", "why", "could you", "guidance", "outlook"]
+                ):
+                    intent = "STRATEGIC_PROBING"
+
             results.append({
                 "speaker": seg["speaker"],
                 "text": seg["text"],
                 "intent": intent
             })
+
+        results = smooth_intents(results)
 
         print("[DEBUG] SAMPLE OUTPUT:")
         for result in results[:5]:

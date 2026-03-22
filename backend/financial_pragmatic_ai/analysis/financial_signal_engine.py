@@ -1,51 +1,28 @@
 from financial_pragmatic_ai.analysis.market_predictor import predict_market_reaction
 
 
-intent_weights = {
-    "EXPANSION": 2,
-    "COST_PRESSURE": -3,
-    "STRATEGIC_PROBING": -1,
-    "GENERAL_UPDATE": 0,
-}
+def compute_risk_score(intents):
+    score = 50
 
-speaker_weights = {
-    "CEO": 1.5,
-    "CFO": 2.0,
-    "ANALYST": 1.0,
-}
+    for item in intents:
+        if item["intent"] == "COST_PRESSURE":
+            score += 2
+        elif item["intent"] == "STRATEGIC_PROBING":
+            score += 1
+        elif item["intent"] == "EXPANSION":
+            score -= 1
 
-
-def compute_risk_score(segments):
-    unique_intents = set([x["intent"] for x in segments])
-    print("[DEBUG] Unique intents:", unique_intents)
-
-    if unique_intents == {"GENERAL_UPDATE"}:
-        print("[WARN] All intents are GENERAL_UPDATE. Using neutral score.")
-        return 0
-
-    score = 0
-
-    for segment in segments:
-        intent_val = intent_weights.get(segment["intent"], 0)
-        speaker_val = speaker_weights.get(segment["speaker"], 1)
-        score += intent_val * speaker_val
-
-    return score
+    return max(0, min(100, score))
 
 
-def normalize_score(score):
-    return max(0, min(100, 50 - score * 5))
-
-
-def compute_market_prediction(segments):
-    score = compute_risk_score(segments)
-    risk_score = normalize_score(score)
+def compute_market_prediction(intents):
+    risk_score = compute_risk_score(intents)
     market_prediction = predict_market_reaction(risk_score)
     return market_prediction
 
 
-def detect_conflict(segments):
-    speakers = {x["speaker"]: x["intent"] for x in segments}
+def detect_conflict(intents):
+    speakers = {x["speaker"]: x["intent"] for x in intents}
 
     if speakers.get("CEO") == "EXPANSION" and speakers.get("CFO") == "COST_PRESSURE":
         return "Strategic conflict between growth and financial pressure"

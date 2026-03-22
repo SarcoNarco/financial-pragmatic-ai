@@ -107,7 +107,19 @@ class FinancialPragmaticTransformer(nn.Module):
             return "STRATEGIC_PROBING"
 
         pred_idx = int(torch.argmax(logits, dim=-1).item())
-        return self.intent_labels[pred_idx]
+        confidence = float(torch.softmax(logits, dim=-1)[0][pred_idx].item())
+        intent = self.intent_labels[pred_idx]
+
+        if confidence < 0.6:
+            intent = "GENERAL_UPDATE"
+
+        if intent == "GENERAL_UPDATE":
+            if "growth" in text_lower:
+                return "EXPANSION"
+            if "cost" in text_lower:
+                return "COST_PRESSURE"
+
+        return intent
 
 
 if __name__ == "__main__":

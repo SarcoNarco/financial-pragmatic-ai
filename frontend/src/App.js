@@ -111,8 +111,8 @@ function App() {
 
         <div className="right-panel">
           <h2>Risk Overview</h2>
-          <h1 style={{ fontSize: "48px", color: getColor(data?.risk_score ?? 0) }}>
-            {data?.risk_score ?? "-"}
+          <h1 style={{ fontSize: "48px", color: getColor(data?.score ?? data?.risk_score ?? 0) }}>
+            {data?.score ?? data?.risk_score ?? "-"}
           </h1>
           <p>Risk Score</p>
           <h3>Market Prediction</h3>
@@ -137,6 +137,20 @@ function App() {
 
         <h2>Signal Heatmap</h2>
         <SignalHeatmap segments={data?.segments || []} />
+
+        <h3>Top Growth Drivers</h3>
+        <ul>
+          {(data?.drivers?.growth_drivers || []).map((driver, index) => (
+            <li key={`growth-${index}`}>{driver}</li>
+          ))}
+        </ul>
+
+        <h3>Top Risk Drivers</h3>
+        <ul>
+          {(data?.drivers?.risk_drivers || []).map((driver, index) => (
+            <li key={`risk-${index}`}>{driver}</li>
+          ))}
+        </ul>
 
         <h2>Segments</h2>
         <div className="segment-list">
