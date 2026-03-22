@@ -173,131 +173,135 @@ function App() {
       </aside>
 
       <section className="right">
-        <div className="metrics-card card fade-card">
-          <div className="risk-card">
-            <h2>Risk Score</h2>
-            <h1
-              className="score"
-              style={{
-                color: getScoreTextColor(scoreValue),
-                textShadow: getScoreShadow(scoreValue),
-              }}
-            >
-              {scoreDisplay}
-            </h1>
-          </div>
-
-          <div className="metrics-grid">
-            <div className="metric-item">
-              <h3>Market Prediction</h3>
-              <span className={`badge ${getPredictionClass(data?.prediction)}`}>
-                {data?.prediction || "NEUTRAL"}
-              </span>
+        <div className="right-content">
+          <div className="metrics-card card fade-card">
+            <div className="risk-card">
+              <h2>Risk Score</h2>
+              <h1
+                className="score"
+                style={{
+                  color: getScoreTextColor(scoreValue),
+                  textShadow: getScoreShadow(scoreValue),
+                }}
+              >
+                {scoreDisplay}
+              </h1>
             </div>
 
-            <div className="metric-item">
-              <h3>Confidence</h3>
-              <p>{data?.confidence ?? "-"}%</p>
-              <div className="confidence-bar">
-                <div
-                  className="confidence-fill"
-                  style={{
-                    width: `${confidenceValue}%`,
-                    background: "#569cd6",
-                  }}
-                />
+            <div className="metrics-grid">
+              <div className="metric-item">
+                <h3>Market Prediction</h3>
+                <span className={`badge ${getPredictionClass(data?.prediction)}`}>
+                  {data?.prediction || "NEUTRAL"}
+                </span>
               </div>
-            </div>
 
-            <div className="metric-item">
-              <h3>Volatility</h3>
-              <p className={`volatility-tag ${getVolatilityClass(data?.volatility)}`}>
-                {getVolatilityLabel(data?.volatility)}
-              </p>
-            </div>
-
-            <div className="metric-item">
-              <h3>Signal</h3>
-              <p>{data?.signal || "-"}</p>
-            </div>
-
-            <div className="metric-item full-width">
-              <h3>Insight</h3>
-              <p>{data?.insight || "-"}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="analytics-card card fade-card">
-          <div className="chart-panel">
-            <h2>Timeline Graph</h2>
-            <TimelineChart segments={data?.segments || []} />
-          </div>
-
-          <div className="heatmap-panel">
-            <h2>Signal Heatmap</h2>
-            <SignalHeatmap segments={data?.segments || []} />
-          </div>
-
-          <div className="distribution-panel">
-            <h3>Signal Distribution</h3>
-            {signalDistribution.map((row) => (
-              <div className="distribution-row" key={row.intent}>
-                <span className="distribution-label">{row.intent}</span>
-                <div className="distribution-track">
+              <div className="metric-item">
+                <h3>Confidence</h3>
+                <p>{data?.confidence ?? "-"}%</p>
+                <div className="confidence-bar">
                   <div
-                    className="distribution-fill"
-                    style={{ width: `${row.percentage}%` }}
+                    className="confidence-fill"
+                    style={{
+                      width: `${confidenceValue}%`,
+                      background: "#569cd6",
+                    }}
                   />
                 </div>
-                <span className="distribution-percent">{row.percentage}%</span>
               </div>
-            ))}
-          </div>
 
-          <div className="drivers-grid">
-            <div className="driver-column growth-column">
-              <h3>Top Growth Drivers</h3>
-              <ul className="driver-list">
-                {growthDriverItems.map((driver, index) => (
-                  <li
-                    key={getDriverKey("growth", index, driver)}
-                    title={driver}
-                    className="driver-item"
-                  >
-                    {driver}
-                  </li>
-                ))}
-              </ul>
-            </div>
+              <div className="metric-item">
+                <h3>Volatility</h3>
+                <p className={`volatility-tag ${getVolatilityClass(data?.volatility)}`}>
+                  {getVolatilityLabel(data?.volatility)}
+                </p>
+              </div>
 
-            <div className="driver-column risk-column">
-              <h3>Top Risk Drivers</h3>
-              <ul className="driver-list">
-                {riskDriverItems.map((driver, index) => (
-                  <li
-                    key={getDriverKey("risk", index, driver)}
-                    title={driver}
-                    className="driver-item"
-                  >
-                    {driver}
-                  </li>
-                ))}
-              </ul>
+              <div className="metric-item">
+                <h3>Signal</h3>
+                <p>{data?.signal || "-"}</p>
+              </div>
+
+              <div className="metric-item full-width">
+                <h3>Insight</h3>
+                <p>{data?.insight || "-"}</p>
+              </div>
             </div>
           </div>
 
-          <h2>Segments</h2>
-          <div className="segment-list">
-            {(data?.segments || []).map((segment, index) => (
-              <div
-                className="segment-item"
-                key={`${segment.speaker}-${segment.intent}-${index}`}
-                title={segment.text}
-              >
-                {segment.speaker} - {segment.intent}
+          <div className="analytics-card card fade-card">
+            <div className="chart-panel">
+              <h2>Timeline Graph</h2>
+              <div className="timeline">
+                <TimelineChart segments={data?.segments || []} />
               </div>
-            ))}
+            </div>
+
+            <div className="heatmap-panel">
+              <h2>Signal Heatmap</h2>
+              <SignalHeatmap segments={data?.segments || []} />
+            </div>
+
+            <div className="distribution-panel">
+              <h3>Signal Distribution</h3>
+              {signalDistribution.map((row) => (
+                <div className="distribution-row" key={row.intent}>
+                  <span className="distribution-label">{row.intent}</span>
+                  <div className="distribution-track">
+                    <div
+                      className="distribution-fill"
+                      style={{ width: `${row.percentage}%` }}
+                    />
+                  </div>
+                  <span className="distribution-percent">{row.percentage}%</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="drivers-grid">
+              <div className="driver-column growth-column">
+                <h3>Top Growth Drivers</h3>
+                <ul className="driver-list">
+                  {growthDriverItems.map((driver, index) => (
+                    <li
+                      key={getDriverKey("growth", index, driver)}
+                      title={driver}
+                      className="driver-item"
+                    >
+                      {driver}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="driver-column risk-column">
+                <h3>Top Risk Drivers</h3>
+                <ul className="driver-list">
+                  {riskDriverItems.map((driver, index) => (
+                    <li
+                      key={getDriverKey("risk", index, driver)}
+                      title={driver}
+                      className="driver-item"
+                    >
+                      {driver}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <h2>Segments</h2>
+            <div className="segment-list">
+              {(data?.segments || []).map((segment, index) => (
+                <div
+                  className="segment-item"
+                  key={`${segment.speaker}-${segment.intent}-${index}`}
+                  title={segment.text}
+                >
+                  {segment.speaker} - {segment.intent}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
