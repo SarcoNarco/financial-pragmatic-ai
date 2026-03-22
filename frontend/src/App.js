@@ -111,12 +111,12 @@ function App() {
 
         <div className="right-panel">
           <h2>Risk Overview</h2>
-          <h1 style={{ fontSize: "48px", color: getColor(data?.score ?? data?.risk_score ?? 0) }}>
-            {data?.score ?? data?.risk_score ?? "-"}
+          <h1 style={{ fontSize: "48px", color: getColor(data?.score ?? 0) }}>
+            {data?.score ?? "-"}
           </h1>
           <p>Risk Score</p>
           <h3>Market Prediction</h3>
-          <p>{data?.market_prediction || "-"}</p>
+          <p>{data?.prediction || "-"}</p>
 
           <div className="result-row">
             <span className="label">Signal</span>
@@ -127,7 +127,6 @@ function App() {
             <span className="value">{data?.insight || "-"}</span>
           </div>
 
-          {data?.conflict ? <div style={{ color: "red" }}>Warning: {data.conflict}</div> : null}
         </div>
       </div>
 

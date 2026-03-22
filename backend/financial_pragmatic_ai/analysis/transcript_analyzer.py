@@ -26,10 +26,10 @@ def smooth_intents(results, window=5):
         window_slice = results[max(0, i - window): i + window + 1]
 
         weights = {}
-        for j, result in enumerate(window_slice):
+        for j, r in enumerate(window_slice):
             distance = abs(i - (max(0, i - window) + j))
             weight = 1 / (distance + 1)
-            weights[result["intent"]] = weights.get(result["intent"], 0) + weight
+            weights[r["intent"]] = weights.get(r["intent"], 0) + weight
 
         dominant = max(weights, key=weights.get)
 
@@ -83,17 +83,42 @@ class TranscriptAnalyzer:
             if intent == "GENERAL_UPDATE":
                 if any(
                     x in text_lower
-                    for x in ["growth", "increase", "expand", "strong", "up", "record", "improved"]
+                    for x in [
+                        "strong growth",
+                        "revenue increased",
+                        "sales increased",
+                        "record revenue",
+                        "expanded operations",
+                        "growth accelerated",
+                        "higher demand"
+                    ]
                 ):
                     intent = "EXPANSION"
                 elif any(
                     x in text_lower
-                    for x in ["cost", "pressure", "decline", "risk", "margin", "inflation", "headwind"]
+                    for x in [
+                        "cost pressure",
+                        "margin pressure",
+                        "decline",
+                        "risk",
+                        "inflation",
+                        "headwinds",
+                        "lower margins",
+                        "compression"
+                    ]
                 ):
                     intent = "COST_PRESSURE"
                 elif any(
                     x in text_lower
-                    for x in ["how", "what", "why", "could you", "guidance", "outlook"]
+                    for x in [
+                        "how",
+                        "what",
+                        "why",
+                        "could you",
+                        "guidance",
+                        "outlook",
+                        "expect going forward"
+                    ]
                 ):
                     intent = "STRATEGIC_PROBING"
 

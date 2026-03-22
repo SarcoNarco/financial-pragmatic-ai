@@ -4,14 +4,12 @@ from pydantic import BaseModel
 
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
 from financial_pragmatic_ai.analysis.financial_signal_engine import (
-    compute_market_prediction,
     compute_risk_score,
-    detect_conflict,
-    generate_advanced_insight,
+    derive_market_prediction,
+    derive_signal,
+    generate_insight,
 )
 from financial_pragmatic_ai.analysis.insight_engine import extract_key_drivers
-from financial_pragmatic_ai.analysis.signal_statistics import compute_signal_stats
-from financial_pragmatic_ai.analysis.timeline_builder import build_timeline
 
 
 app = FastAPI(title="Financial Pragmatic AI API")
@@ -37,32 +35,20 @@ def analyze_transcript(request: TranscriptRequest):
     results = result["segments"]
     if len(results) == 0:
         return {"error": "Could not parse transcript"}
-    warning = None
-    if len(results) < 3:
-        warning = "Low confidence: insufficient structured data"
-    timeline = build_timeline(results)
-    stats = compute_signal_stats(results)
-    signal = result.get("dominant_signal")
-    if signal is None:
-        signal = result["aggregation"]["dominant_signal"]
+
     score = compute_risk_score(results)
-    insight = generate_advanced_insight(results)
+    signal = derive_signal(score)
+    prediction = derive_market_prediction(score)
+    insight = generate_insight(score)
     drivers = extract_key_drivers(results)
-    market_prediction = compute_market_prediction(results)
-    conflict = detect_conflict(results)
 
     return {
-        "segments": results,
-        "signal": signal,
         "score": score,
+        "signal": signal,
+        "prediction": prediction,
         "insight": insight,
+        "segments": results,
         "drivers": drivers,
-        "timeline": timeline,
-        "signal_stats": stats,
-        "risk_score": score,
-        "market_prediction": market_prediction,
-        "conflict": conflict,
-        "warning": warning,
     }
 
 
@@ -101,30 +87,18 @@ async def upload_transcript(file: UploadFile = File(...)):
     results = result["segments"]
     if len(results) == 0:
         return {"error": "Could not parse transcript"}
-    warning = None
-    if len(results) < 3:
-        warning = "Low confidence: insufficient structured data"
-    timeline = build_timeline(results)
-    stats = compute_signal_stats(results)
-    signal = result.get("dominant_signal")
-    if signal is None:
-        signal = result["aggregation"]["dominant_signal"]
+
     score = compute_risk_score(results)
-    insight = generate_advanced_insight(results)
+    signal = derive_signal(score)
+    prediction = derive_market_prediction(score)
+    insight = generate_insight(score)
     drivers = extract_key_drivers(results)
-    market_prediction = compute_market_prediction(results)
-    conflict = detect_conflict(results)
 
     return {
-        "segments": results,
-        "signal": signal,
         "score": score,
+        "signal": signal,
+        "prediction": prediction,
         "insight": insight,
+        "segments": results,
         "drivers": drivers,
-        "timeline": timeline,
-        "signal_stats": stats,
-        "risk_score": score,
-        "market_prediction": market_prediction,
-        "conflict": conflict,
-        "warning": warning,
     }
