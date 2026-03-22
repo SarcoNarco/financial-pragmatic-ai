@@ -4,7 +4,9 @@ from pydantic import BaseModel
 
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
 from financial_pragmatic_ai.analysis.financial_signal_engine import (
+    compute_confidence,
     compute_risk_score,
+    detect_volatility,
     derive_market_prediction,
     derive_signal,
     generate_insight,
@@ -39,6 +41,8 @@ def analyze_transcript(request: TranscriptRequest):
     score = compute_risk_score(results)
     signal = derive_signal(score)
     prediction = derive_market_prediction(score)
+    confidence = compute_confidence(results)
+    volatility = detect_volatility(results)
     insight = generate_insight(score)
     drivers = extract_key_drivers(results)
 
@@ -46,6 +50,8 @@ def analyze_transcript(request: TranscriptRequest):
         "score": score,
         "signal": signal,
         "prediction": prediction,
+        "confidence": confidence,
+        "volatility": volatility,
         "insight": insight,
         "segments": results,
         "drivers": drivers,
@@ -91,6 +97,8 @@ async def upload_transcript(file: UploadFile = File(...)):
     score = compute_risk_score(results)
     signal = derive_signal(score)
     prediction = derive_market_prediction(score)
+    confidence = compute_confidence(results)
+    volatility = detect_volatility(results)
     insight = generate_insight(score)
     drivers = extract_key_drivers(results)
 
@@ -98,6 +106,8 @@ async def upload_transcript(file: UploadFile = File(...)):
         "score": score,
         "signal": signal,
         "prediction": prediction,
+        "confidence": confidence,
+        "volatility": volatility,
         "insight": insight,
         "segments": results,
         "drivers": drivers,

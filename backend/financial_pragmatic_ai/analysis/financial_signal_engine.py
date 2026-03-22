@@ -37,3 +37,39 @@ def generate_insight(score):
         return "Strong growth signals with positive business momentum."
     else:
         return "Mixed signals in management discussion."
+
+
+def compute_confidence(intents):
+    counts = {}
+    total = len(intents)
+
+    if total == 0:
+        return 0.0
+
+    for item in intents:
+        counts[item["intent"]] = counts.get(item["intent"], 0) + 1
+
+    dominant = max(counts.values())
+    confidence = dominant / total
+
+    return round(confidence * 100, 2)
+
+
+def detect_volatility(intents):
+    if len(intents) <= 1:
+        return "LOW"
+
+    changes = 0
+
+    for i in range(1, len(intents)):
+        if intents[i]["intent"] != intents[i - 1]["intent"]:
+            changes += 1
+
+    volatility_ratio = changes / len(intents)
+
+    if volatility_ratio > 0.5:
+        return "HIGH"
+    elif volatility_ratio > 0.3:
+        return "MEDIUM"
+    else:
+        return "LOW"

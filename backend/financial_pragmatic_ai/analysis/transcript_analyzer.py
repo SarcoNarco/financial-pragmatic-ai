@@ -80,7 +80,7 @@ class TranscriptAnalyzer:
             text_lower = seg["text"].lower()
 
             # Override weak GENERAL_UPDATE predictions
-            if intent == "GENERAL_UPDATE":
+            if intent in ["GENERAL_UPDATE", "EXECUTIVE"]:
                 if any(
                     x in text_lower
                     for x in [
@@ -91,6 +91,19 @@ class TranscriptAnalyzer:
                         "expanded operations",
                         "growth accelerated",
                         "higher demand"
+                    ]
+                ):
+                    intent = "EXPANSION"
+                elif any(
+                    x in text_lower
+                    for x in [
+                        "performance",
+                        "results",
+                        "quarter",
+                        "guidance",
+                        "outlook",
+                        "business growth",
+                        "positive momentum"
                     ]
                 ):
                     intent = "EXPANSION"

@@ -117,6 +117,10 @@ function App() {
           <p>Risk Score</p>
           <h3>Market Prediction</h3>
           <p>{data?.prediction || "-"}</p>
+          <h3>Confidence</h3>
+          <p>{data?.confidence ?? "-"}%</p>
+          <h3>Volatility</h3>
+          <p>{data?.volatility || "-"}</p>
 
           <div className="result-row">
             <span className="label">Signal</span>
