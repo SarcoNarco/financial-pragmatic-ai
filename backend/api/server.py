@@ -43,7 +43,7 @@ def analyze_transcript(request: TranscriptRequest):
     prediction = derive_market_prediction(score)
     confidence = compute_confidence(results)
     volatility = detect_volatility(results)
-    insight = generate_insight(score)
+    insight = generate_insight(score, results)
     drivers = extract_key_drivers(results)
 
     return {
@@ -99,7 +99,7 @@ async def upload_transcript(file: UploadFile = File(...)):
     prediction = derive_market_prediction(score)
     confidence = compute_confidence(results)
     volatility = detect_volatility(results)
-    insight = generate_insight(score)
+    insight = generate_insight(score, results)
     drivers = extract_key_drivers(results)
 
     return {

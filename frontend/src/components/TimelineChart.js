@@ -19,35 +19,35 @@ ChartJS.register(
 );
 
 const intentWeights = {
-  EXPANSION: 2,
-  COST_PRESSURE: -2,
-  STRATEGIC_PROBING: -1,
+  EXPANSION: 1,
+  COST_PRESSURE: -1,
+  STRATEGIC_PROBING: -0.5,
   GENERAL_UPDATE: 0,
 };
 
-function movingAverage(points, windowSize = 2) {
-  return points.map((_, index) => {
-    const start = Math.max(0, index - windowSize);
-    const end = Math.min(points.length - 1, index + windowSize);
-    const slice = points.slice(start, end + 1);
-    const total = slice.reduce((sum, value) => sum + value, 0);
-    return total / slice.length;
+function smoothData(data, windowSize = 5) {
+  return data.map((_, i, arr) => {
+    const start = Math.max(0, i - windowSize);
+    const end = Math.min(arr.length, i + windowSize);
+    const subset = arr.slice(start, end);
+    return subset.reduce((a, b) => a + b, 0) / subset.length;
   });
 }
 
 export default function TimelineChart({ segments }) {
-  const labels = segments.map((_, i) => `Step ${i}`);
-  const rawPoints = segments.map((s) => intentWeights[s.intent] ?? 0);
-  const dataPoints = movingAverage(rawPoints, 2);
+  const labels = segments.map((_, i) => `Step ${i + 1}`);
+  const signalData = segments.map((s) => intentWeights[s.intent] ?? 0);
+  const smoothedData = smoothData(signalData);
 
   const data = {
     labels,
     datasets: [
       {
         label: "Conversation Flow",
-        data: dataPoints,
+        data: smoothedData,
         fill: true,
         tension: 0.4,
+        borderWidth: 2,
         borderColor: "#569cd6",
         backgroundColor: (context) => {
           const chart = context.chart;
@@ -75,6 +75,24 @@ export default function TimelineChart({ segments }) {
         bodyColor: "#d4d4d4",
         borderColor: "#333",
         borderWidth: 1,
+        callbacks: {
+          title: (items) => {
+            const index = items[0]?.dataIndex ?? 0;
+            return `Step ${index + 1}`;
+          },
+          label: (item) => {
+            const index = item.dataIndex;
+            const segment = segments[index];
+            const intent = segment?.intent || "GENERAL_UPDATE";
+            return `Intent: ${intent}`;
+          },
+          afterLabel: (item) => {
+            const index = item.dataIndex;
+            const segment = segments[index];
+            const text = segment?.text || "";
+            return `Text: ${text}`;
+          },
+        },
       },
     },
     scales: {
@@ -85,16 +103,16 @@ export default function TimelineChart({ segments }) {
       y: {
         ticks: {
           color: "#d4d4d4",
-          stepSize: 1,
+          stepSize: 0.5,
           callback: (value) => {
-            if (value === 2) return "Growth";
-            if (value === -2) return "Risk";
-            if (value === -1) return "Uncertainty";
+            if (value === 1) return "Growth";
+            if (value === -1) return "Risk";
+            if (value === -0.5) return "Probe";
             return "Neutral";
           },
         },
-        min: -2,
-        max: 2,
+        min: -1,
+        max: 1,
         grid: { color: "#333" },
       },
     },

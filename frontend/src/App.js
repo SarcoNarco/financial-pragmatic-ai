@@ -68,6 +68,26 @@ function App() {
     return "#F44336";
   };
 
+  const getScoreShadow = (score) => {
+    const color = getScoreTextColor(score);
+    if (color === "#d4d4d4") return "none";
+    return `0 0 10px ${color}B3`;
+  };
+
+  const distributionOrder = [
+    "EXPANSION",
+    "GENERAL_UPDATE",
+    "STRATEGIC_PROBING",
+    "COST_PRESSURE",
+  ];
+
+  const signalDistribution = distributionOrder.map((intent) => {
+    const total = (data?.segments || []).length;
+    const count = (data?.segments || []).filter((segment) => segment.intent === intent).length;
+    const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+    return { intent, percentage };
+  });
+
   const analyzeTranscript = async () => {
     setLoading(true);
     setError("");
@@ -124,7 +144,7 @@ function App() {
 
   return (
     <div className="container">
-      <aside className="left fade-card">
+      <aside className="left card fade-card">
         <h1>Financial Transcript Analyzer</h1>
         <label htmlFor="transcript">Transcript Input</label>
         <textarea
@@ -153,10 +173,16 @@ function App() {
       </aside>
 
       <section className="right">
-        <div className="metrics-card fade-card">
+        <div className="metrics-card card fade-card">
           <div className="risk-card">
             <h2>Risk Score</h2>
-            <h1 className="risk-value" style={{ color: getScoreTextColor(scoreValue) }}>
+            <h1
+              className="score"
+              style={{
+                color: getScoreTextColor(scoreValue),
+                textShadow: getScoreShadow(scoreValue),
+              }}
+            >
               {scoreDisplay}
             </h1>
           </div>
@@ -202,7 +228,7 @@ function App() {
           </div>
         </div>
 
-        <div className="analytics-card fade-card">
+        <div className="analytics-card card fade-card">
           <div className="chart-panel">
             <h2>Timeline Graph</h2>
             <TimelineChart segments={data?.segments || []} />
@@ -211,6 +237,22 @@ function App() {
           <div className="heatmap-panel">
             <h2>Signal Heatmap</h2>
             <SignalHeatmap segments={data?.segments || []} />
+          </div>
+
+          <div className="distribution-panel">
+            <h3>Signal Distribution</h3>
+            {signalDistribution.map((row) => (
+              <div className="distribution-row" key={row.intent}>
+                <span className="distribution-label">{row.intent}</span>
+                <div className="distribution-track">
+                  <div
+                    className="distribution-fill"
+                    style={{ width: `${row.percentage}%` }}
+                  />
+                </div>
+                <span className="distribution-percent">{row.percentage}%</span>
+              </div>
+            ))}
           </div>
 
           <div className="drivers-grid">
