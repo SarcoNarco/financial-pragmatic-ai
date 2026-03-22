@@ -25,9 +25,20 @@ const intentWeights = {
   GENERAL_UPDATE: 0,
 };
 
+function movingAverage(points, windowSize = 2) {
+  return points.map((_, index) => {
+    const start = Math.max(0, index - windowSize);
+    const end = Math.min(points.length - 1, index + windowSize);
+    const slice = points.slice(start, end + 1);
+    const total = slice.reduce((sum, value) => sum + value, 0);
+    return total / slice.length;
+  });
+}
+
 export default function TimelineChart({ segments }) {
   const labels = segments.map((_, i) => `Step ${i}`);
-  const dataPoints = segments.map((s) => intentWeights[s.intent] ?? 0);
+  const rawPoints = segments.map((s) => intentWeights[s.intent] ?? 0);
+  const dataPoints = movingAverage(rawPoints, 2);
 
   const data = {
     labels,
@@ -35,11 +46,21 @@ export default function TimelineChart({ segments }) {
       {
         label: "Conversation Flow",
         data: dataPoints,
+        fill: true,
         tension: 0.4,
         borderColor: "#569cd6",
-        backgroundColor: "rgba(86, 156, 214, 0.25)",
-        pointBackgroundColor: "#9cdcfe",
-        pointBorderColor: "#569cd6",
+        backgroundColor: (context) => {
+          const chart = context.chart;
+          const { ctx, chartArea } = chart;
+          if (!chartArea) {
+            return "rgba(86, 156, 214, 0.15)";
+          }
+          const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, "rgba(86, 156, 214, 0.40)");
+          gradient.addColorStop(1, "rgba(86, 156, 214, 0.03)");
+          return gradient;
+        },
+        pointRadius: 0,
       },
     ],
   };

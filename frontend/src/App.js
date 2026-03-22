@@ -17,10 +17,55 @@ function App() {
   const [result, setResult] = useState(null);
   const data = result;
 
-  const getColor = (score) => {
-    if (score > 70) return "#f44336";
-    if (score > 40) return "#ff9800";
-    return "#4caf50";
+  const getPredictionClass = (prediction) => {
+    if (prediction === "UP") return "badge-up";
+    if (prediction === "DOWN") return "badge-down";
+    return "badge-neutral";
+  };
+
+  const getVolatilityLabel = (volatility) => {
+    if (volatility === "LOW") return "🟢 Stable";
+    if (volatility === "MEDIUM") return "🟡 Moderate";
+    if (volatility === "HIGH") return "🔴 Volatile";
+    return "-";
+  };
+
+  const getVolatilityClass = (volatility) => {
+    if (volatility === "LOW") return "volatility-low";
+    if (volatility === "MEDIUM") return "volatility-medium";
+    if (volatility === "HIGH") return "volatility-high";
+    return "";
+  };
+
+  const getConfidenceValue = () => {
+    const confidence = Number(data?.confidence ?? 0);
+    if (Number.isNaN(confidence)) return 0;
+    return Math.max(0, Math.min(100, confidence));
+  };
+
+  const confidenceValue = getConfidenceValue();
+  const scoreValue = Number(data?.score ?? 0);
+  const scoreDisplay = data?.score ?? "-";
+  const growthDrivers = data?.drivers?.growth_drivers || [];
+  const riskDrivers = data?.drivers?.risk_drivers || [];
+
+  const getDriverItems = (items) => {
+    if (items.length > 0) return items;
+    return ["No drivers detected"];
+  };
+
+  const growthDriverItems = getDriverItems(growthDrivers);
+  const riskDriverItems = getDriverItems(riskDrivers);
+
+  const getDriverKey = (prefix, index, value) => `${prefix}-${index}-${value.slice(0, 12)}`;
+
+  const getScoreTextColor = (score) => {
+    if (typeof score !== "number" || Number.isNaN(score)) {
+      return "#d4d4d4";
+    }
+    if (score < 30) return "#4CAF50";
+    if (score <= 60) return "#FFC107";
+    return "#F44336";
   };
 
   const analyzeTranscript = async () => {
@@ -79,91 +124,141 @@ function App() {
 
   return (
     <div className="container">
-      <h1>Financial Transcript Analyzer</h1>
+      <aside className="left fade-card">
+        <h1>Financial Transcript Analyzer</h1>
+        <label htmlFor="transcript">Transcript Input</label>
+        <textarea
+          id="transcript"
+          value={transcript}
+          onChange={(e) => setTranscript(e.target.value)}
+          placeholder="Paste earnings call transcript here..."
+        />
+        <button onClick={analyzeTranscript} disabled={loading || !transcript.trim()}>
+          {loading ? "Analyzing..." : "Analyze"}
+        </button>
 
-      <div className="top-section">
-        <div className="left-panel">
-          <label htmlFor="transcript">Transcript Input</label>
-          <textarea
-            id="transcript"
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            placeholder="Paste earnings call transcript here..."
+        <div className="upload-section">
+          <label htmlFor="file-upload">Upload Transcript (.txt / .pdf)</label>
+          <input
+            id="file-upload"
+            type="file"
+            accept=".txt,.pdf,text/plain,application/pdf"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
-          <button onClick={analyzeTranscript} disabled={loading || !transcript.trim()}>
-            {loading ? "Analyzing..." : "Analyze"}
+          <button onClick={uploadFile} disabled={loading || !file}>
+            {loading ? "Uploading..." : "Upload Transcript"}
           </button>
-
-          <div className="upload-section">
-            <label htmlFor="file-upload">Upload Transcript (.txt / .pdf)</label>
-            <input
-              id="file-upload"
-              type="file"
-              accept=".txt,.pdf,text/plain,application/pdf"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-            />
-            <button onClick={uploadFile} disabled={loading || !file}>
-              {loading ? "Uploading..." : "Upload Transcript"}
-            </button>
-          </div>
-          {error ? <p className="error">{error}</p> : null}
         </div>
+        {error ? <p className="error">{error}</p> : null}
+      </aside>
 
-        <div className="right-panel">
-          <h2>Risk Overview</h2>
-          <h1 style={{ fontSize: "48px", color: getColor(data?.score ?? 0) }}>
-            {data?.score ?? "-"}
-          </h1>
-          <p>Risk Score</p>
-          <h3>Market Prediction</h3>
-          <p>{data?.prediction || "-"}</p>
-          <h3>Confidence</h3>
-          <p>{data?.confidence ?? "-"}%</p>
-          <h3>Volatility</h3>
-          <p>{data?.volatility || "-"}</p>
-
-          <div className="result-row">
-            <span className="label">Signal</span>
-            <span className="value">{data?.signal || "-"}</span>
-          </div>
-          <div className="result-row">
-            <span className="label">Insight</span>
-            <span className="value">{data?.insight || "-"}</span>
+      <section className="right">
+        <div className="metrics-card fade-card">
+          <div className="risk-card">
+            <h2>Risk Score</h2>
+            <h1 className="risk-value" style={{ color: getScoreTextColor(scoreValue) }}>
+              {scoreDisplay}
+            </h1>
           </div>
 
-        </div>
-      </div>
-
-      <div className="bottom-section">
-        <h2>Timeline Graph</h2>
-        <TimelineChart segments={data?.segments || []} />
-
-        <h2>Signal Heatmap</h2>
-        <SignalHeatmap segments={data?.segments || []} />
-
-        <h3>Top Growth Drivers</h3>
-        <ul>
-          {(data?.drivers?.growth_drivers || []).map((driver, index) => (
-            <li key={`growth-${index}`}>{driver}</li>
-          ))}
-        </ul>
-
-        <h3>Top Risk Drivers</h3>
-        <ul>
-          {(data?.drivers?.risk_drivers || []).map((driver, index) => (
-            <li key={`risk-${index}`}>{driver}</li>
-          ))}
-        </ul>
-
-        <h2>Segments</h2>
-        <div className="segment-list">
-          {(data?.segments || []).map((segment, index) => (
-            <div className="segment-item" key={`${segment.speaker}-${segment.intent}-${index}`} title={segment.text}>
-              {segment.speaker} - {segment.intent}
+          <div className="metrics-grid">
+            <div className="metric-item">
+              <h3>Market Prediction</h3>
+              <span className={`badge ${getPredictionClass(data?.prediction)}`}>
+                {data?.prediction || "NEUTRAL"}
+              </span>
             </div>
-          ))}
+
+            <div className="metric-item">
+              <h3>Confidence</h3>
+              <p>{data?.confidence ?? "-"}%</p>
+              <div className="confidence-bar">
+                <div
+                  className="confidence-fill"
+                  style={{
+                    width: `${confidenceValue}%`,
+                    background: "#569cd6",
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="metric-item">
+              <h3>Volatility</h3>
+              <p className={`volatility-tag ${getVolatilityClass(data?.volatility)}`}>
+                {getVolatilityLabel(data?.volatility)}
+              </p>
+            </div>
+
+            <div className="metric-item">
+              <h3>Signal</h3>
+              <p>{data?.signal || "-"}</p>
+            </div>
+
+            <div className="metric-item full-width">
+              <h3>Insight</h3>
+              <p>{data?.insight || "-"}</p>
+            </div>
+          </div>
         </div>
-      </div>
+
+        <div className="analytics-card fade-card">
+          <div className="chart-panel">
+            <h2>Timeline Graph</h2>
+            <TimelineChart segments={data?.segments || []} />
+          </div>
+
+          <div className="heatmap-panel">
+            <h2>Signal Heatmap</h2>
+            <SignalHeatmap segments={data?.segments || []} />
+          </div>
+
+          <div className="drivers-grid">
+            <div className="driver-column growth-column">
+              <h3>Top Growth Drivers</h3>
+              <ul className="driver-list">
+                {growthDriverItems.map((driver, index) => (
+                  <li
+                    key={getDriverKey("growth", index, driver)}
+                    title={driver}
+                    className="driver-item"
+                  >
+                    {driver}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="driver-column risk-column">
+              <h3>Top Risk Drivers</h3>
+              <ul className="driver-list">
+                {riskDriverItems.map((driver, index) => (
+                  <li
+                    key={getDriverKey("risk", index, driver)}
+                    title={driver}
+                    className="driver-item"
+                  >
+                    {driver}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <h2>Segments</h2>
+          <div className="segment-list">
+            {(data?.segments || []).map((segment, index) => (
+              <div
+                className="segment-item"
+                key={`${segment.speaker}-${segment.intent}-${index}`}
+                title={segment.text}
+              >
+                {segment.speaker} - {segment.intent}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
