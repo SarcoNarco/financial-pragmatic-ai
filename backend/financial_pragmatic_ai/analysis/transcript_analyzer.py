@@ -1,22 +1,44 @@
+from pathlib import Path
+
 import torch
 
+from financial_pragmatic_ai.analysis.financial_signal_engine import (
+    compute_risk_score,
+    derive_signal,
+)
 from financial_pragmatic_ai.analysis.transcript_parser import parse_transcript
+from financial_pragmatic_ai.models.conversation_attention_model import (
+    INDEX_TO_SIGNAL,
+    load_conversation_attention_model,
+)
 from financial_pragmatic_ai.models.financial_pragmatic_transformer_v2 import (
     FinancialPragmaticTransformer,
 )
-from financial_pragmatic_ai.analysis.conversation_vectorizer import vectorize_conversation
-from financial_pragmatic_ai.models.conversation_interaction_model import ConversationInteractionModel
+from financial_pragmatic_ai.models.finbert_intent_model import FinBERTIntentModel
 
-MODEL_PATH = "financial_pragmatic_ai/models/pragmatic_transformer_trained.pt"
 
-device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+MODELS_DIR = Path(__file__).resolve().parents[1] / "models"
+FALLBACK_MODEL_PATH = MODELS_DIR / "pragmatic_transformer_trained.pt"
+FINBERT_INTENT_PATH = MODELS_DIR / "finbert_intent.pt"
+CONVERSATION_ATTENTION_PATH = MODELS_DIR / "conversation_attention.pt"
 
-INTENT_LABELS = [
-    "EXPANSION",
-    "COST_PRESSURE",
-    "STRATEGIC_PROBING",
-    "GENERAL_UPDATE",
-]
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+elif torch.cuda.is_available():
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
+
+SPEAKER_ENCODING = {
+    "CEO": [1.0, 0.0, 0.0],
+    "CFO": [0.0, 1.0, 0.0],
+    "ANALYST": [0.0, 0.0, 1.0],
+}
+
+
+def _speaker_vector(speaker: str) -> torch.Tensor:
+    values = SPEAKER_ENCODING.get(speaker.upper(), [0.0, 0.0, 0.0])
+    return torch.tensor(values, dtype=torch.float32)
 
 
 def smooth_intents(results, window=5):
@@ -44,85 +66,134 @@ def smooth_intents(results, window=5):
 class TranscriptAnalyzer:
 
     def __init__(self):
+        self.intent_model = None
+        self.fallback_intent_model = None
+        self._last_embeddings = []
 
-        self.model = FinancialPragmaticTransformer()
-        self.model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-        self.model.to(device)
-        self.model.eval()
+        try:
+            self.intent_model = FinBERTIntentModel(device=device)
+            self.intent_model.load_weights(FINBERT_INTENT_PATH)
+        except Exception as exc:
+            print(f"[WARN] FinBERT intent model unavailable: {exc}")
+            self.intent_model = None
 
-        self.conversation_model = ConversationInteractionModel()
-        self.conversation_model.load_state_dict(
-            torch.load("financial_pragmatic_ai/models/conversation_signal_model.pt")
+        try:
+            self.fallback_intent_model = FinancialPragmaticTransformer()
+            self.fallback_intent_model.load_state_dict(
+                torch.load(FALLBACK_MODEL_PATH, map_location=device)
+            )
+            self.fallback_intent_model.to(device)
+            self.fallback_intent_model.eval()
+        except Exception as exc:
+            print(f"[WARN] Fallback intent model unavailable: {exc}")
+            self.fallback_intent_model = None
+
+        self.conversation_model = load_conversation_attention_model(
+            model_path=CONVERSATION_ATTENTION_PATH,
+            input_size=771,
+            device=device,
         )
-        self.conversation_model.eval()
+        if self.conversation_model is None:
+            print("[WARN] Conversation attention model not found. Using rule-based fallback.")
+
     def predict_intent(self, text, speaker):
-        return self.model.predict(text, speaker=speaker, target_device=device)
+        if self.intent_model is not None:
+            output = self.intent_model.predict(text)
+            cls_embedding = output["embedding"].float()
+            final_embedding = torch.cat([cls_embedding, _speaker_vector(speaker)], dim=-1)
+            return {
+                "intent": output["intent"],
+                "logits": output["logits"],
+                "embedding": final_embedding,
+            }
+
+        if self.fallback_intent_model is not None:
+            intent = self.fallback_intent_model.predict(
+                text,
+                speaker=speaker,
+                target_device=device,
+            )
+        else:
+            intent = "GENERAL_UPDATE"
+
+        fallback_embedding = torch.cat(
+            [torch.zeros(768, dtype=torch.float32), _speaker_vector(speaker)],
+            dim=-1,
+        )
+        return {
+            "intent": intent,
+            "logits": torch.zeros(4, dtype=torch.float32),
+            "embedding": fallback_embedding,
+        }
 
     def predict_conversation_signal(self, intents):
+        if (
+            self.conversation_model is not None
+            and len(intents) > 0
+            and len(self._last_embeddings) == len(intents)
+        ):
+            sequence = torch.stack(self._last_embeddings).unsqueeze(0).to(device)
+            with torch.no_grad():
+                logits = self.conversation_model(sequence)
+            pred = int(torch.argmax(logits, dim=-1).item())
+            return INDEX_TO_SIGNAL[pred]
 
-        vec = vectorize_conversation(intents).unsqueeze(0)
-
-        with torch.no_grad():
-            logits = self.conversation_model(vec)
-
-        pred = torch.argmax(logits, dim=-1).item()
-
-        labels = ["neutral", "risk", "growth"]
-
-        return labels[pred]
+        score = compute_risk_score(intents)
+        return derive_signal(score)
 
     def analyze(self, raw_text):
         segments = parse_transcript(raw_text)
         results = []
+        embeddings = []
 
         for seg in segments:
-            intent = self.model.predict(seg["text"], seg["speaker"])
+            prediction = self.predict_intent(seg["text"], seg["speaker"])
+            intent = prediction["intent"]
             text_lower = seg["text"].lower()
 
-            # Override weak GENERAL_UPDATE predictions
             if intent in ["GENERAL_UPDATE", "EXECUTIVE"]:
                 if any(
-                    x in text_lower
-                    for x in [
+                    phrase in text_lower
+                    for phrase in [
                         "strong growth",
                         "revenue increased",
                         "sales increased",
                         "record revenue",
                         "expanded operations",
                         "growth accelerated",
-                        "higher demand"
+                        "higher demand",
                     ]
                 ):
                     intent = "EXPANSION"
                 elif any(
-                    x in text_lower
-                    for x in [
+                    phrase in text_lower
+                    for phrase in [
                         "performance",
                         "results",
                         "quarter",
                         "guidance",
                         "outlook",
                         "business growth",
-                        "positive momentum"
+                        "positive momentum",
                     ]
                 ):
                     intent = "EXPANSION"
                 elif any(
-                    x in text_lower
-                    for x in [
+                    phrase in text_lower
+                    for phrase in [
                         "increase",
                         "improvement",
                         "growth of",
                         "up by",
                         "higher than",
                         "better than expected",
-                        "improved performance"
+                        "improved performance",
                     ]
                 ):
                     intent = "EXPANSION"
                 elif any(
-                    x in text_lower
-                    for x in [
+                    phrase in text_lower
+                    for phrase in [
                         "cost pressure",
                         "margin pressure",
                         "decline",
@@ -130,20 +201,20 @@ class TranscriptAnalyzer:
                         "inflation",
                         "headwinds",
                         "lower margins",
-                        "compression"
+                        "compression",
                     ]
                 ):
                     intent = "COST_PRESSURE"
                 elif any(
-                    x in text_lower
-                    for x in [
+                    phrase in text_lower
+                    for phrase in [
                         "how",
                         "what",
                         "why",
                         "could you",
                         "guidance",
                         "outlook",
-                        "expect going forward"
+                        "expect going forward",
                     ]
                 ):
                     intent = "STRATEGIC_PROBING"
@@ -151,10 +222,12 @@ class TranscriptAnalyzer:
             results.append({
                 "speaker": seg["speaker"],
                 "text": seg["text"],
-                "intent": intent
+                "intent": intent,
             })
+            embeddings.append(prediction["embedding"])
 
         results = smooth_intents(results)
+        self._last_embeddings = embeddings[: len(results)]
 
         print("[DEBUG] SAMPLE OUTPUT:")
         for result in results[:5]:

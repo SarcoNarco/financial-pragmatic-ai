@@ -9,32 +9,24 @@ class EarningsCallAnalyzer:
         self.transcript_analyzer = transcript_analyzer or TranscriptAnalyzer()
         self.timeline_analyzer = TimelineSignalAnalyzer(self.transcript_analyzer)
 
-    def aggregate_signals(self, timeline_signals, fallback_signal="neutral"):
-
-        signal_counts = {
-            "risk": 0,
-            "growth": 0,
-            "neutral": 0
-        }
+    def aggregate_signals(self, timeline_signals, model_signal="neutral"):
+        signal_counts = {"risk": 0, "growth": 0, "neutral": 0}
 
         for item in timeline_signals:
             signal = item.get("signal", "neutral")
             if signal in signal_counts:
                 signal_counts[signal] += 1
 
-        if timeline_signals:
-            dominant_signal = max(signal_counts, key=signal_counts.get)
-        else:
-            dominant_signal = fallback_signal if fallback_signal in signal_counts else "neutral"
+        dominant_signal = model_signal if model_signal in signal_counts else "neutral"
 
         return {
             "dominant_signal": dominant_signal,
-            "signal_counts": signal_counts
+            "signal_counts": signal_counts,
         }
 
     def analyze(self, transcript):
         segments = self.transcript_analyzer.analyze(transcript)
-        fallback_signal = (
+        model_signal = (
             self.transcript_analyzer.predict_conversation_signal(segments)
             if segments
             else "neutral"
@@ -43,7 +35,7 @@ class EarningsCallAnalyzer:
         timeline_signals = self.timeline_analyzer.analyze_timeline(segments)
         aggregation = self.aggregate_signals(
             timeline_signals,
-            fallback_signal=fallback_signal
+            model_signal=model_signal,
         )
 
         insight = generate_insight(aggregation["dominant_signal"])
@@ -52,5 +44,5 @@ class EarningsCallAnalyzer:
             "segments": segments,
             "timeline_signals": timeline_signals,
             "aggregation": aggregation,
-            "insight": insight
+            "insight": insight,
         }

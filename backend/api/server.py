@@ -39,6 +39,14 @@ def analyze_transcript(request: TranscriptRequest):
         return {"error": "Could not parse transcript"}
 
     score = compute_risk_score(results)
+    signal = result["aggregation"]["dominant_signal"]
+    if signal == "risk":
+        score = max(score, 65)
+    elif signal == "growth":
+        score = min(score, 35)
+    else:
+        score = min(max(score, 36), 64)
+
     signal = derive_signal(score)
     prediction = derive_market_prediction(score)
     confidence = compute_confidence(results)
@@ -95,6 +103,14 @@ async def upload_transcript(file: UploadFile = File(...)):
         return {"error": "Could not parse transcript"}
 
     score = compute_risk_score(results)
+    signal = result["aggregation"]["dominant_signal"]
+    if signal == "risk":
+        score = max(score, 65)
+    elif signal == "growth":
+        score = min(score, 35)
+    else:
+        score = min(max(score, 36), 64)
+
     signal = derive_signal(score)
     prediction = derive_market_prediction(score)
     confidence = compute_confidence(results)
