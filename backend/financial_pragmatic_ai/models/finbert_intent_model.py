@@ -9,7 +9,7 @@ import torch
 from torch import nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoTokenizer, BertForSequenceClassification
+from transformers import AutoModel, AutoTokenizer
 
 torch.set_num_threads(2)
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -87,29 +87,45 @@ class FinBERTIntentModel:
     def __init__(self, model_name: str = MODEL_NAME, device: torch.device | None = None):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = BertForSequenceClassification.from_pretrained(
+        self.model = AutoModel.from_pretrained(
             model_name,
-            num_labels=len(INTENT_LABELS),
-            ignore_mismatched_sizes=True,
             attn_implementation="eager",  # Disable SDPA to prevent kernel dispatch hang on Colab
         )
+        self.classifier = nn.Sequential(
+            nn.Linear(768, 256),
+            nn.ReLU(),
+            nn.Linear(256, len(INTENT_LABELS)),
+        )
         self.model = self.model.float()
+        self.classifier = self.classifier.float()
         self.model.to(self.device)
+        self.classifier.to(self.device)
         self.model.eval()
+        for param in self.model.parameters():
+            param.requires_grad = False
 
     def load_weights(self, model_path: Path | str = DEFAULT_MODEL_PATH) -> bool:
         path = Path(model_path)
         if not path.exists():
             return False
-        state_dict = torch.load(path, map_location=self.device)
-        self.model.load_state_dict(state_dict)
+        state = torch.load(path, map_location=self.device)
+        if isinstance(state, dict) and "classifier" in state:
+            self.classifier.load_state_dict(state["classifier"])
+        elif isinstance(state, dict):
+            try:
+                self.classifier.load_state_dict(state)
+            except RuntimeError:
+                return False
+        else:
+            return False
         self.model.eval()
+        self.classifier.eval()
         return True
 
     def save_weights(self, model_path: Path | str = DEFAULT_MODEL_PATH):
         path = Path(model_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self.model.state_dict(), path)
+        torch.save({"classifier": self.classifier.state_dict()}, path)
 
     def predict(self, text: str, max_length: int = 128):
         encoded = self.tokenizer(
@@ -122,16 +138,14 @@ class FinBERTIntentModel:
         encoded = {key: value.to(self.device) for key, value in encoded.items()}
 
         with torch.no_grad():
-            outputs = self.model(
-                **encoded,
-                output_hidden_states=True,
-                return_dict=True,
-            )
+            outputs = self.model(**encoded)
+            cls_embedding = outputs.last_hidden_state[:, 0, :]
+            logits = self.classifier(cls_embedding).squeeze(0)
 
-        logits = outputs.logits.squeeze(0).detach().cpu()
+        logits = logits.detach().cpu()
         probs = torch.softmax(logits, dim=-1)
         pred_idx = int(torch.argmax(probs).item())
-        cls_embedding = outputs.hidden_states[-1][:, 0, :].squeeze(0).detach().cpu()
+        cls_embedding = cls_embedding.squeeze(0).detach().cpu()
 
         return {
             "intent": INDEX_TO_INTENT[pred_idx],
@@ -174,8 +188,10 @@ def train_finbert_intent_model(
 
     print("Starting training loop...")
     model_wrapper.model.to(model_wrapper.device)
-    model_wrapper.model.train()
-    optimizer = AdamW(model_wrapper.model.parameters(), lr=learning_rate)
+    model_wrapper.classifier.to(model_wrapper.device)
+    model_wrapper.model.eval()
+    model_wrapper.classifier.train()
+    optimizer = AdamW(model_wrapper.classifier.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
 
     print("Warming up model...")
@@ -197,12 +213,16 @@ def train_finbert_intent_model(
             attention_mask = batch["attention_mask"].to(model_wrapper.device).contiguous()
             labels = batch["label"].to(model_wrapper.device)
 
-            optimizer.zero_grad()  # Must be before forward pass
-            outputs = model_wrapper.model.forward(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-            )
-            loss = criterion(outputs.logits, labels)
+            with torch.no_grad():
+                outputs = model_wrapper.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                )
+                cls_embedding = outputs.last_hidden_state[:, 0, :]
+
+            optimizer.zero_grad()
+            logits = model_wrapper.classifier(cls_embedding)
+            loss = criterion(logits, labels)
 
             loss.backward()
             optimizer.step()
@@ -214,6 +234,7 @@ def train_finbert_intent_model(
 
     model_wrapper.save_weights(output_path)
     model_wrapper.model.eval()
+    model_wrapper.classifier.eval()
     print(f"Saved finetuned intent model to: {output_path}")
     return model_wrapper
 
