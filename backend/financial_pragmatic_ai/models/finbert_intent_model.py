@@ -161,8 +161,8 @@ class FinBERTIntentModel:
 def train_finbert_intent_model(
     dataset_path: Path | str | None = None,
     output_path: Path | str = DEFAULT_MODEL_PATH,
-    max_length: int = 128,
-    batch_size: int = 16,
+    max_length: int = 64,
+    batch_size: int = 64,
     epochs: int = 4,
     learning_rate: float = 2e-5,
 ):
@@ -187,7 +187,7 @@ def train_finbert_intent_model(
     dataset = IntentTextDataset(frame, model_wrapper.tokenizer, max_length=max_length)
     print("Dataset ready.")
 
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2)
 
     print("Starting training loop...")
     model_wrapper.model.to(model_wrapper.encoder_device)
@@ -203,7 +203,7 @@ def train_finbert_intent_model(
     all_labels = []
     with torch.no_grad():
         for batch_idx, batch in enumerate(loader):
-            if batch_idx % 10 == 0:
+            if batch_idx % 20 == 0:
                 print(f"  Embedding batch {batch_idx + 1}/{total_batches}")
             input_ids_cpu = batch["input_ids"].to(model_wrapper.encoder_device)
             attention_mask_cpu = batch["attention_mask"].to(model_wrapper.encoder_device)
@@ -221,7 +221,7 @@ def train_finbert_intent_model(
 
     train_dataset = TensorDataset(X, y)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-    print("Embedding cache ready.")
+    print(f"Embedding cache ready. X={tuple(X.shape)}, y={tuple(y.shape)}")
 
     for epoch in range(epochs):
         total_loss = 0.0
