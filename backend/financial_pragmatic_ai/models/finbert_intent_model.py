@@ -31,25 +31,31 @@ class IntentTextDataset(Dataset):
 
     def __init__(self, frame: pd.DataFrame, tokenizer, max_length: int = 128):
         self.frame = frame.reset_index(drop=True)
-        self.tokenizer = tokenizer
         self.max_length = max_length
 
-    def __len__(self):
-        return len(self.frame)
-
-    def __getitem__(self, index):
-        row = self.frame.iloc[index]
-        encoded = self.tokenizer(
-            str(row["text"]),
+        texts = self.frame["text"].astype(str).tolist()
+        encoded = tokenizer(
+            texts,
             truncation=True,
             padding="max_length",
             max_length=self.max_length,
             return_tensors="pt",
         )
+        self.input_ids = encoded["input_ids"]
+        self.attention_mask = encoded["attention_mask"]
+        self.labels = torch.tensor(
+            [INTENT_TO_INDEX[intent] for intent in self.frame["intent"].tolist()],
+            dtype=torch.long,
+        )
+
+    def __len__(self):
+        return self.input_ids.size(0)
+
+    def __getitem__(self, index):
         return {
-            "input_ids": encoded["input_ids"].squeeze(0),
-            "attention_mask": encoded["attention_mask"].squeeze(0),
-            "label": torch.tensor(INTENT_TO_INDEX[row["intent"]], dtype=torch.long),
+            "input_ids": self.input_ids[index],
+            "attention_mask": self.attention_mask[index],
+            "label": self.labels[index],
         }
 
 
@@ -142,7 +148,13 @@ def train_finbert_intent_model(
 
     model_wrapper = FinBERTIntentModel()
     dataset = IntentTextDataset(frame, model_wrapper.tokenizer, max_length=max_length)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=0,
+        pin_memory=(torch.cuda.is_available() or torch.backends.mps.is_available()),
+    )
     print("DataLoader initialized. Starting training...")
     model_wrapper.model.train()
     optimizer = AdamW(model_wrapper.model.parameters(), lr=learning_rate)
