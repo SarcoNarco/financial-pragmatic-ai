@@ -8,7 +8,7 @@ import pandas as pd
 import torch
 from torch import nn
 from torch.optim import AdamW
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 from transformers import AutoModel, AutoTokenizer
 
 torch.set_num_threads(2)
@@ -185,7 +185,7 @@ def train_finbert_intent_model(
     dataset = IntentTextDataset(frame, model_wrapper.tokenizer, max_length=max_length)
     print("Dataset ready.")
 
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
     print("Starting training loop...")
     model_wrapper.model.to(model_wrapper.encoder_device)
@@ -195,44 +195,45 @@ def train_finbert_intent_model(
     optimizer = AdamW(model_wrapper.classifier.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
 
-    print("Warming up model...")
+    print("Precomputing CLS embeddings...")
+    all_embeddings = []
+    all_labels = []
     with torch.no_grad():
-        dummy_input = torch.randint(0, 1000, (2, 64), device=model_wrapper.encoder_device)
-        dummy_mask = torch.ones_like(dummy_input, device=model_wrapper.encoder_device)
-        _ = model_wrapper.model(
-            input_ids=dummy_input,
-            attention_mask=dummy_mask,
-        )
-    print("Warmup complete.")
+        for batch in loader:
+            input_ids_cpu = batch["input_ids"].to(model_wrapper.encoder_device)
+            attention_mask_cpu = batch["attention_mask"].to(model_wrapper.encoder_device)
+            labels = batch["label"]
+            outputs = model_wrapper.model(
+                input_ids=input_ids_cpu,
+                attention_mask=attention_mask_cpu,
+            )
+            cls_embedding = outputs.last_hidden_state[:, 0, :]
+            all_embeddings.append(cls_embedding)
+            all_labels.append(labels)
+
+    X = torch.cat(all_embeddings, dim=0).to(model_wrapper.device)
+    y = torch.cat(all_labels, dim=0).to(model_wrapper.device)
+
+    train_dataset = TensorDataset(X, y)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    print("Embedding cache ready.")
 
     for epoch in range(epochs):
         total_loss = 0.0
-        for batch_idx, batch in enumerate(loader):
+        for batch_idx, (X_batch, y_batch) in enumerate(train_loader):
             if batch_idx == 0:
-                print("Running first forward pass...")
-            input_ids_cpu = batch["input_ids"].to(model_wrapper.encoder_device).contiguous()
-            attention_mask_cpu = (
-                batch["attention_mask"].to(model_wrapper.encoder_device).contiguous()
-            )
-            labels = batch["label"].to(model_wrapper.device)
-
-            with torch.no_grad():
-                outputs = model_wrapper.model(
-                    input_ids=input_ids_cpu,
-                    attention_mask=attention_mask_cpu,
-                )
-                cls_embedding = outputs.last_hidden_state[:, 0, :].to(model_wrapper.device)
+                print("Running first classifier batch...")
 
             optimizer.zero_grad()
-            logits = model_wrapper.classifier(cls_embedding)
-            loss = criterion(logits, labels)
+            logits = model_wrapper.classifier(X_batch)
+            loss = criterion(logits, y_batch)
 
             loss.backward()
             optimizer.step()
 
             total_loss += float(loss.item())
 
-        avg_loss = total_loss / max(len(loader), 1)
+        avg_loss = total_loss / max(len(train_loader), 1)
         print(f"Epoch {epoch + 1}/{epochs} Loss {avg_loss:.4f}")
 
     model_wrapper.save_weights(output_path)
