@@ -82,6 +82,7 @@ class FinBERTIntentModel:
             model_name,
             num_labels=len(INTENT_LABELS),
             ignore_mismatched_sizes=True,
+            attn_implementation="eager",  # Disable SDPA to prevent kernel dispatch hang on Colab
         )
         self.model = self.model.float()
         self.model.to(self.device)
@@ -187,13 +188,13 @@ def train_finbert_intent_model(
             attention_mask = batch["attention_mask"].to(model_wrapper.device).contiguous()
             labels = batch["label"].to(model_wrapper.device)
 
+            optimizer.zero_grad()  # Must be before forward pass
             outputs = model_wrapper.model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
             )
             loss = criterion(outputs.logits, labels)
 
-            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
