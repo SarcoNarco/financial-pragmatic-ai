@@ -142,8 +142,8 @@ def train_finbert_intent_model(
 
     model_wrapper = FinBERTIntentModel()
     dataset = IntentTextDataset(frame, model_wrapper.tokenizer, max_length=max_length)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
+    print("DataLoader initialized. Starting training...")
     model_wrapper.model.train()
     optimizer = AdamW(model_wrapper.model.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
@@ -151,6 +151,8 @@ def train_finbert_intent_model(
     for epoch in range(epochs):
         total_loss = 0.0
         for batch in loader:
+            print("First batch reached")
+            break
             input_ids = batch["input_ids"].to(model_wrapper.device)
             attention_mask = batch["attention_mask"].to(model_wrapper.device)
             labels = batch["label"].to(model_wrapper.device)
