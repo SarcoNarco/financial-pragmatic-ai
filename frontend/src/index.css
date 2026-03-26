@@ -10,12 +10,17 @@ html,
 body,
 #root {
   height: 100%;
-  overflow: hidden;
+}
+
+html,
+body {
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
-  background-color: #1e1e1e;
-  color: #d4d4d4;
-  font-family: "Fira Code", Consolas, Menlo, Monaco, monospace;
+  overflow-y: auto;
+  background: #0b0f14;
+  color: #d1d5db;
+  font-family: "JetBrains Mono", monospace;
 }

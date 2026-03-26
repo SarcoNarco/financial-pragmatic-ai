@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import axios from "axios";
 import TimelineChart from "./components/TimelineChart";
 import SignalHeatmap from "./components/SignalHeatmap";
+import SummaryCard from "./components/SummaryCard";
 import "./App.css";
 
 const SAMPLE = `CEO: We plan to expand operations globally.
@@ -9,99 +10,103 @@ CFO: Costs may rise due to supply chain issues.
 Analyst: How will this impact margins?
 CFO: We are monitoring cost structure carefully.`;
 
+const DEMO_TRANSCRIPTS = {
+  growth: `CEO: We delivered record revenue and strong growth across core markets.
+CFO: Operating leverage improved and margins were stable despite investments.
+Analyst: How sustainable is demand in the next two quarters?`,
+  risk: `CEO: Demand is softening in key regions.
+CFO: We are seeing margin pressure from higher input costs and weaker pricing.
+Analyst: Could you clarify downside risks to guidance?`,
+  mixed: `CEO: We expanded in new regions with positive customer traction.
+CFO: Cost inflation remains elevated and may pressure profitability.
+Analyst: What is the timeline for margin recovery?`,
+};
+
+function getToneClass(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (["growth", "up", "low"].includes(normalized)) return "growth";
+  if (["risk", "down", "high"].includes(normalized)) return "risk";
+  return "neutral";
+}
+
 function App() {
+  const [activeTab, setActiveTab] = useState("analyze");
   const [transcript, setTranscript] = useState(SAMPLE);
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [demoCase, setDemoCase] = useState("growth");
+
   const data = result;
 
-  const getPredictionClass = (prediction) => {
-    if (prediction === "UP") return "badge-up";
-    if (prediction === "DOWN") return "badge-down";
-    return "badge-neutral";
-  };
+  const analyzedSegments = data?.segments || [];
 
-  const getVolatilityLabel = (volatility) => {
-    if (volatility === "LOW") return "🟢 Stable";
-    if (volatility === "MEDIUM") return "🟡 Moderate";
-    if (volatility === "HIGH") return "🔴 Volatile";
-    return "-";
-  };
+  const extractedDrivers = useMemo(() => {
+    const growthFromSegments = analyzedSegments
+      .filter((segment) => segment.intent === "EXPANSION")
+      .map((segment) => segment.text)
+      .slice(0, 3);
 
-  const getVolatilityClass = (volatility) => {
-    if (volatility === "LOW") return "volatility-low";
-    if (volatility === "MEDIUM") return "volatility-medium";
-    if (volatility === "HIGH") return "volatility-high";
-    return "";
-  };
+    const riskFromSegments = analyzedSegments
+      .filter(
+        (segment) =>
+          segment.intent === "COST_PRESSURE" || segment.intent === "STRATEGIC_PROBING"
+      )
+      .map((segment) => segment.text)
+      .slice(0, 3);
 
-  const getConfidenceValue = () => {
-    const confidence = Number(data?.confidence ?? 0);
-    if (Number.isNaN(confidence)) return 0;
-    return Math.max(0, Math.min(100, confidence));
-  };
+    return {
+      growth: growthFromSegments.length
+        ? growthFromSegments
+        : (data?.drivers?.growth_drivers || []).slice(0, 3),
+      risk: riskFromSegments.length
+        ? riskFromSegments
+        : (data?.drivers?.risk_drivers || []).slice(0, 3),
+    };
+  }, [analyzedSegments, data?.drivers]);
 
-  const confidenceValue = getConfidenceValue();
-  const scoreValue = Number(data?.score ?? 0);
-  const scoreDisplay = data?.score ?? "-";
-  const growthDrivers = data?.drivers?.growth_drivers || [];
-  const riskDrivers = data?.drivers?.risk_drivers || [];
+  const growthDrivers = extractedDrivers.growth;
+  const riskDrivers = extractedDrivers.risk;
 
-  const getDriverItems = (items) => {
-    if (items.length > 0) return items;
-    return ["No drivers detected"];
-  };
+  const signalDistribution = useMemo(() => {
+    const order = ["EXPANSION", "GENERAL_UPDATE", "STRATEGIC_PROBING", "COST_PRESSURE"];
+    const total = analyzedSegments.length;
 
-  const growthDriverItems = getDriverItems(growthDrivers);
-  const riskDriverItems = getDriverItems(riskDrivers);
+    return order.map((intent) => {
+      const count = analyzedSegments.filter((segment) => segment.intent === intent).length;
+      const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+      return { intent, count, percentage };
+    });
+  }, [analyzedSegments]);
 
-  const getDriverKey = (prefix, index, value) => `${prefix}-${index}-${value.slice(0, 12)}`;
+  const analyzeTranscript = async (overrideText) => {
+    const payloadText = typeof overrideText === "string" ? overrideText : transcript;
 
-  const getScoreTextColor = (score) => {
-    if (typeof score !== "number" || Number.isNaN(score)) {
-      return "#d4d4d4";
+    if (!payloadText.trim()) {
+      setError("Please enter a transcript");
+      return;
     }
-    if (score < 30) return "#4CAF50";
-    if (score <= 60) return "#FFC107";
-    return "#F44336";
-  };
 
-  const getScoreShadow = (score) => {
-    const color = getScoreTextColor(score);
-    if (color === "#d4d4d4") return "none";
-    return `0 0 10px ${color}B3`;
-  };
-
-  const distributionOrder = [
-    "EXPANSION",
-    "GENERAL_UPDATE",
-    "STRATEGIC_PROBING",
-    "COST_PRESSURE",
-  ];
-
-  const signalDistribution = distributionOrder.map((intent) => {
-    const total = (data?.segments || []).length;
-    const count = (data?.segments || []).filter((segment) => segment.intent === intent).length;
-    const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-    return { intent, percentage };
-  });
-
-  const analyzeTranscript = async () => {
     setLoading(true);
     setError("");
+
     try {
       const response = await axios.post("http://127.0.0.1:8000/analyze", {
-        transcript,
+        transcript: payloadText,
       });
+
+      if (response.data?.error) {
+        setResult(null);
+        setError("Analysis failed. Try again.");
+        return;
+      }
+
       setResult(response.data);
-    } catch (err) {
+      setActiveTab("analyze");
+    } catch (_err) {
       setResult(null);
-      setError(
-        err?.response?.data?.detail ||
-          "Unable to analyze transcript. Ensure backend is running on 127.0.0.1:8000"
-      );
+      setError("Analysis failed. Try again.");
     } finally {
       setLoading(false);
     }
@@ -109,202 +114,277 @@ function App() {
 
   const uploadFile = async () => {
     if (!file) {
-      setError("Please select a .txt transcript file first.");
+      setError("Please enter a transcript");
       return;
     }
 
     setLoading(true);
     setError("");
+
     try {
       const formData = new FormData();
       formData.append("file", file);
 
       const response = await axios.post("http://127.0.0.1:8000/upload", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       if (response.data?.error) {
         setResult(null);
-        setError(response.data.error);
-      } else {
-        setResult(response.data);
+        setError("Analysis failed. Try again.");
+        return;
       }
-    } catch (err) {
+
+      setResult(response.data);
+      setActiveTab("analyze");
+    } catch (_err) {
       setResult(null);
-      setError(
-        err?.response?.data?.detail ||
-          "Unable to upload transcript. Ensure backend is running on 127.0.0.1:8000"
-      );
+      setError("Analysis failed. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  const loadSampleTranscript = async () => {
+    const selected = DEMO_TRANSCRIPTS[demoCase];
+    setTranscript(selected);
+    await analyzeTranscript(selected);
+  };
+
   return (
-    <div className="container">
-      <aside className="left card fade-card">
-        <h1>Financial Transcript Analyzer</h1>
-        <label htmlFor="transcript">Transcript Input</label>
-        <textarea
-          id="transcript"
-          value={transcript}
-          onChange={(e) => setTranscript(e.target.value)}
-          placeholder="Paste earnings call transcript here..."
-        />
-        <button onClick={analyzeTranscript} disabled={loading || !transcript.trim()}>
-          {loading ? "Analyzing..." : "Analyze"}
-        </button>
+    <div className="main-container">
+      <div className="content">
+        <main className="container">
+          <nav className="top-nav panel">
+            <button
+              className={activeTab === "analyze" ? "tab active" : "tab"}
+              onClick={() => setActiveTab("analyze")}
+              disabled={loading}
+            >
+              Analyze
+            </button>
+            <button
+              className={activeTab === "insights" ? "tab active" : "tab"}
+              onClick={() => setActiveTab("insights")}
+              disabled={loading}
+            >
+              Insights
+            </button>
+            <button
+              className={activeTab === "demo" ? "tab active" : "tab"}
+              onClick={() => setActiveTab("demo")}
+              disabled={loading}
+            >
+              Demo
+            </button>
+          </nav>
 
-        <div className="upload-section">
-          <label htmlFor="file-upload">Upload Transcript (.txt / .pdf)</label>
-          <input
-            id="file-upload"
-            type="file"
-            accept=".txt,.pdf,text/plain,application/pdf"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-          />
-          <button onClick={uploadFile} disabled={loading || !file}>
-            {loading ? "Uploading..." : "Upload Transcript"}
-          </button>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-      </aside>
-
-      <section className="right">
-        <div className="right-content">
-          <div className="metrics-card card fade-card">
-            <div className="risk-card">
-              <h2>Risk Score</h2>
-              <h1
-                className="score"
-                style={{
-                  color: getScoreTextColor(scoreValue),
-                  textShadow: getScoreShadow(scoreValue),
-                }}
-              >
-                {scoreDisplay}
-              </h1>
-            </div>
-
-            <div className="metrics-grid">
-              <div className="metric-item">
-                <h3>Market Prediction</h3>
-                <span className={`badge ${getPredictionClass(data?.prediction)}`}>
-                  {data?.prediction || "NEUTRAL"}
-                </span>
-              </div>
-
-              <div className="metric-item">
-                <h3>Confidence</h3>
-                <p>{data?.confidence ?? "-"}%</p>
-                <div className="confidence-bar">
-                  <div
-                    className="confidence-fill"
-                    style={{
-                      width: `${confidenceValue}%`,
-                      background: "#569cd6",
-                    }}
+          {activeTab === "analyze" ? (
+            <div className="main-grid">
+              <aside className="left-panel">
+                <section className="panel input-panel">
+                  <div className="panel-title">Transcript Input</div>
+                  <textarea
+                    id="transcript"
+                    value={transcript}
+                    onChange={(event) => setTranscript(event.target.value)}
+                    placeholder="Paste earnings call transcript here..."
+                    disabled={loading}
                   />
-                </div>
-              </div>
-
-              <div className="metric-item">
-                <h3>Volatility</h3>
-                <p className={`volatility-tag ${getVolatilityClass(data?.volatility)}`}>
-                  {getVolatilityLabel(data?.volatility)}
-                </p>
-              </div>
-
-              <div className="metric-item">
-                <h3>Signal</h3>
-                <p>{data?.signal || "-"}</p>
-              </div>
-
-              <div className="metric-item full-width">
-                <h3>Insight</h3>
-                <p>{data?.insight || "-"}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="analytics-card card fade-card">
-            <div className="chart-panel">
-              <h2>Timeline Graph</h2>
-              <div className="timeline">
-                <TimelineChart segments={data?.segments || []} />
-              </div>
-            </div>
-
-            <div className="heatmap-panel">
-              <h2>Signal Heatmap</h2>
-              <SignalHeatmap segments={data?.segments || []} />
-            </div>
-
-            <div className="distribution-panel">
-              <h3>Signal Distribution</h3>
-              {signalDistribution.map((row) => (
-                <div className="distribution-row" key={row.intent}>
-                  <span className="distribution-label">{row.intent}</span>
-                  <div className="distribution-track">
-                    <div
-                      className="distribution-fill"
-                      style={{ width: `${row.percentage}%` }}
+                  <button onClick={() => analyzeTranscript()} disabled={loading}>
+                    {loading ? "Analyzing..." : "Analyze"}
+                  </button>
+                  <div className="upload-section">
+                    <label htmlFor="file-upload">Upload (.txt / .pdf)</label>
+                    <input
+                      id="file-upload"
+                      type="file"
+                      accept=".txt,.pdf,text/plain,application/pdf"
+                      onChange={(event) => setFile(event.target.files?.[0] || null)}
+                      disabled={loading}
                     />
+                    <button onClick={uploadFile} disabled={loading || !file}>
+                      {loading ? "Uploading..." : "Upload"}
+                    </button>
                   </div>
-                  <span className="distribution-percent">{row.percentage}%</span>
-                </div>
-              ))}
-            </div>
+                  {loading ? (
+                    <div className="loading-row">
+                      <span className="spinner" />
+                      <span>Analyzing transcript...</span>
+                    </div>
+                  ) : null}
+                  {error ? <p className="error">{error}</p> : null}
+                </section>
+              </aside>
 
-            <div className="drivers-grid">
-              <div className="driver-column growth-column">
-                <h3>Top Growth Drivers</h3>
-                <ul className="driver-list">
-                  {growthDriverItems.map((driver, index) => (
-                    <li
-                      key={getDriverKey("growth", index, driver)}
-                      title={driver}
-                      className="driver-item"
-                    >
-                      {driver}
-                    </li>
+              <section className="right-panel">
+                <SummaryCard
+                  signal={data?.signal}
+                  score={data?.score}
+                  prediction={data?.prediction}
+                  confidence={data?.confidence}
+                  volatility={data?.volatility}
+                  keyDriver={growthDrivers[0]}
+                  keyConcern={riskDrivers[0]}
+                />
+
+                <section className="panel graph-panel">
+                  <div className="panel-title">Timeline</div>
+                  <div className="chart-container">
+                    <TimelineChart segments={analyzedSegments} />
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-title">Signal Heatmap</div>
+                  <SignalHeatmap segments={analyzedSegments} />
+                </section>
+
+                <section className="panel distribution-panel">
+                  <div className="panel-title">Signal Distribution</div>
+                  {signalDistribution.map((row) => (
+                    <div className="distribution-row" key={row.intent}>
+                      <span className="distribution-label">{row.intent}</span>
+                      <div className="bar">
+                        <div className="bar-fill" style={{ width: `${row.percentage}%` }} />
+                      </div>
+                      <span className="distribution-percent">{row.percentage}%</span>
+                    </div>
                   ))}
-                </ul>
-              </div>
+                </section>
 
-              <div className="driver-column risk-column">
-                <h3>Top Risk Drivers</h3>
-                <ul className="driver-list">
-                  {riskDriverItems.map((driver, index) => (
-                    <li
-                      key={getDriverKey("risk", index, driver)}
-                      title={driver}
-                      className="driver-item"
-                    >
-                      {driver}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                <section className="panel drivers-panel">
+                  <div className="panel-title">Drivers</div>
+                  <div className="drivers">
+                    <div className="driver-box">
+                      <div className="sub-title growth">Growth Drivers</div>
+                      <ul className="driver-list">
+                        {(growthDrivers.length ? growthDrivers : ["No growth driver detected"]).map(
+                          (driver, index) => (
+                            <li
+                              key={`growth-${index}-${driver.slice(0, 12)}`}
+                              title={driver}
+                              className="driver-item"
+                            >
+                              {driver}
+                            </li>
+                          )
+                        )}
+                      </ul>
+                    </div>
+
+                    <div className="driver-box">
+                      <div className="sub-title risk">Risk Drivers</div>
+                      <ul className="driver-list">
+                        {(riskDrivers.length ? riskDrivers : ["No risk concern detected"]).map(
+                          (driver, index) => (
+                            <li
+                              key={`risk-${index}-${driver.slice(0, 12)}`}
+                              title={driver}
+                              className="driver-item"
+                            >
+                              {driver}
+                            </li>
+                          )
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-title">Segments</div>
+                  <div className="segment-list">
+                    {analyzedSegments.map((segment, index) => (
+                      <div
+                        className="segment"
+                        key={`${segment.speaker}-${segment.intent}-${index}`}
+                        title={segment.text}
+                      >
+                        [{segment.speaker}] {segment.intent} :: {segment.text}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </section>
             </div>
+          ) : null}
 
-            <h2>Segments</h2>
-            <div className="segment-list">
-              {(data?.segments || []).map((segment, index) => (
-                <div
-                  className="segment-item"
-                  key={`${segment.speaker}-${segment.intent}-${index}`}
-                  title={segment.text}
+          {activeTab === "insights" ? (
+            <section className="panel insights-tab">
+              <div className="panel-title">Explainability</div>
+              <p className="insight-line">
+                This system analyzes interactions between speakers, classifies intent at the
+                segment level, and aggregates signals to estimate financial direction and risk.
+              </p>
+
+              <div className="insights-grid">
+                <section className="panel nested-panel">
+                  <div className="panel-title">Signal Breakdown</div>
+                  {signalDistribution.map((row) => (
+                    <div className="distribution-row" key={`insight-${row.intent}`}>
+                      <span className="distribution-label">{row.intent}</span>
+                      <div className="bar">
+                        <div className="bar-fill" style={{ width: `${row.percentage}%` }} />
+                      </div>
+                      <span className="distribution-percent">{row.percentage}%</span>
+                    </div>
+                  ))}
+                </section>
+
+                <section className="panel nested-panel">
+                  <div className="panel-title">Confidence</div>
+                  <p className="insight-line">
+                    Confidence is based on consistency of detected intent patterns across the
+                    transcript. More agreement across segments yields higher confidence.
+                  </p>
+                </section>
+
+                <section className="panel nested-panel">
+                  <div className="panel-title">Volatility</div>
+                  <p className="insight-line">
+                    Volatility measures fluctuation in intent over time. Frequent shifts between
+                    growth and risk signals indicate higher uncertainty.
+                  </p>
+                  <p className={`insight-line ${getToneClass(data?.volatility)}`}>
+                    Current volatility: {(data?.volatility || "-").toUpperCase()}
+                  </p>
+                </section>
+              </div>
+            </section>
+          ) : null}
+
+          {activeTab === "demo" ? (
+            <section className="panel demo-tab">
+              <div className="panel-title">Demo Mode</div>
+              <p className="insight-line">
+                Choose a scenario, load the sample transcript, and run analysis instantly.
+              </p>
+
+              <div className="demo-controls">
+                <select
+                  value={demoCase}
+                  onChange={(event) => setDemoCase(event.target.value)}
+                  disabled={loading}
                 >
-                  {segment.speaker} - {segment.intent}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+                  <option value="growth">Growth case</option>
+                  <option value="risk">Risk case</option>
+                  <option value="mixed">Mixed case</option>
+                </select>
+
+                <button onClick={loadSampleTranscript} disabled={loading}>
+                  {loading ? "Loading..." : "Load Sample Transcript"}
+                </button>
+              </div>
+
+              <section className="panel nested-panel">
+                <div className="panel-title">Sample Preview</div>
+                <pre className="demo-preview">{DEMO_TRANSCRIPTS[demoCase]}</pre>
+              </section>
+            </section>
+          ) : null}
+        </main>
+      </div>
     </div>
   );
 }
