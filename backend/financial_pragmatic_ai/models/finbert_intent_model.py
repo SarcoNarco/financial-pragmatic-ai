@@ -8,6 +8,8 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 torch.set_num_threads(2)
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.enabled = True
 
 
 MODEL_NAME = "yiyanghkust/finbert-tone"
@@ -158,27 +160,48 @@ def train_finbert_intent_model(
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
     print("Starting training loop...")
+    model_wrapper.model.to(model_wrapper.device)
     model_wrapper.model.train()
-    torch.backends.cudnn.benchmark = True
     optimizer = AdamW(model_wrapper.model.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
+    use_cuda = torch.cuda.is_available()
+
+    # CUDA warmup step to initialize kernels and avoid first-step stall.
+    warmup_batch = next(iter(loader), None)
+    if warmup_batch is not None:
+        warmup_input_ids = warmup_batch["input_ids"].to(model_wrapper.device).contiguous()
+        warmup_attention_mask = (
+            warmup_batch["attention_mask"].to(model_wrapper.device).contiguous()
+        )
+        with torch.no_grad():
+            _ = model_wrapper.model(
+                input_ids=warmup_input_ids,
+                attention_mask=warmup_attention_mask,
+                return_dict=True,
+                use_cache=False,
+            )
+            if use_cuda:
+                torch.cuda.synchronize()
 
     for epoch in range(epochs):
         total_loss = 0.0
         for batch_idx, batch in enumerate(loader):
             if batch_idx == 0:
                 print("First batch executing...")
-            input_ids = batch["input_ids"].to(model_wrapper.device)
-            attention_mask = batch["attention_mask"].to(model_wrapper.device)
+            input_ids = batch["input_ids"].to(model_wrapper.device).contiguous()
+            attention_mask = batch["attention_mask"].to(model_wrapper.device).contiguous()
             labels = batch["label"].to(model_wrapper.device)
 
-            outputs = model_wrapper.model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                return_dict=True,
-                use_cache=False,
-            )
-            loss = criterion(outputs.logits, labels)
+            with torch.cuda.amp.autocast(enabled=use_cuda):
+                outputs = model_wrapper.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    return_dict=True,
+                    use_cache=False,
+                )
+                if use_cuda:
+                    torch.cuda.synchronize()
+                loss = criterion(outputs.logits, labels)
 
             optimizer.zero_grad()
             loss.backward()
