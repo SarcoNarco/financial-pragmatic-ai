@@ -154,7 +154,7 @@ def main() -> None:
     if not DATA_PATH.exists():
         raise FileNotFoundError(f"Dataset not found: {DATA_PATH}")
 
-    df = pd.read_csv(DATA_PATH)
+    df = pd.read_csv(DATA_PATH).sample(10000, random_state=42)
     print(f"Loaded pragmatic dataset rows: {len(df)}")
 
     print("\n[1/4] Training FinBERT intent model...")
