@@ -7,6 +7,8 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+torch.set_num_threads(2)
+
 
 MODEL_NAME = "yiyanghkust/finbert-tone"
 INTENT_LABELS = [
@@ -157,12 +159,15 @@ def train_finbert_intent_model(
 
     print("Starting training loop...")
     model_wrapper.model.train()
+    torch.backends.cudnn.benchmark = True
     optimizer = AdamW(model_wrapper.model.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
 
     for epoch in range(epochs):
         total_loss = 0.0
-        for batch in loader:
+        for batch_idx, batch in enumerate(loader):
+            if batch_idx == 0:
+                print("First batch executing...")
             input_ids = batch["input_ids"].to(model_wrapper.device)
             attention_mask = batch["attention_mask"].to(model_wrapper.device)
             labels = batch["label"].to(model_wrapper.device)
@@ -171,6 +176,7 @@ def train_finbert_intent_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 return_dict=True,
+                use_cache=False,
             )
             loss = criterion(outputs.logits, labels)
 
