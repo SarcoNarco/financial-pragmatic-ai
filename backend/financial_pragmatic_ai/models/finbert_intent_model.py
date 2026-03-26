@@ -1,3 +1,7 @@
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
 from pathlib import Path
 
 import pandas as pd
@@ -12,6 +16,11 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.enabled = True
+
+# Disable unstable SDPA backends; use only safe math kernel
+torch.backends.cuda.enable_flash_sdp(False)
+torch.backends.cuda.enable_mem_efficient_sdp(False)
+torch.backends.cuda.enable_math_sdp(True)
 
 
 MODEL_NAME = "yiyanghkust/finbert-tone"
@@ -189,7 +198,7 @@ def train_finbert_intent_model(
             labels = batch["label"].to(model_wrapper.device)
 
             optimizer.zero_grad()  # Must be before forward pass
-            outputs = model_wrapper.model(
+            outputs = model_wrapper.model.forward(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
             )
