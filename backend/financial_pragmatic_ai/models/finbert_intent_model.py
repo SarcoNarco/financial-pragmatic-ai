@@ -86,6 +86,7 @@ class FinBERTIntentModel:
 
     def __init__(self, model_name: str = MODEL_NAME, device: torch.device | None = None):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.encoder_device = torch.device("cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModel.from_pretrained(
             model_name,
@@ -98,7 +99,7 @@ class FinBERTIntentModel:
         )
         self.model = self.model.float()
         self.classifier = self.classifier.float()
-        self.model.to(self.device)
+        self.model.to(self.encoder_device)
         self.classifier.to(self.device)
         self.model.eval()
         for param in self.model.parameters():
@@ -135,12 +136,12 @@ class FinBERTIntentModel:
             max_length=max_length,
             return_tensors="pt",
         )
-        encoded = {key: value.to(self.device) for key, value in encoded.items()}
+        encoded_cpu = {key: value.to(self.encoder_device) for key, value in encoded.items()}
 
         with torch.no_grad():
-            outputs = self.model(**encoded)
+            outputs = self.model(**encoded_cpu)
             cls_embedding = outputs.last_hidden_state[:, 0, :]
-            logits = self.classifier(cls_embedding).squeeze(0)
+            logits = self.classifier(cls_embedding.to(self.device)).squeeze(0)
 
         logits = logits.detach().cpu()
         probs = torch.softmax(logits, dim=-1)
@@ -187,7 +188,7 @@ def train_finbert_intent_model(
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
     print("Starting training loop...")
-    model_wrapper.model.to(model_wrapper.device)
+    model_wrapper.model.to(model_wrapper.encoder_device)
     model_wrapper.classifier.to(model_wrapper.device)
     model_wrapper.model.eval()
     model_wrapper.classifier.train()
@@ -196,8 +197,8 @@ def train_finbert_intent_model(
 
     print("Warming up model...")
     with torch.no_grad():
-        dummy_input = torch.randint(0, 1000, (2, 64)).to(model_wrapper.device)
-        dummy_mask = torch.ones_like(dummy_input).to(model_wrapper.device)
+        dummy_input = torch.randint(0, 1000, (2, 64), device=model_wrapper.encoder_device)
+        dummy_mask = torch.ones_like(dummy_input, device=model_wrapper.encoder_device)
         _ = model_wrapper.model(
             input_ids=dummy_input,
             attention_mask=dummy_mask,
@@ -209,16 +210,18 @@ def train_finbert_intent_model(
         for batch_idx, batch in enumerate(loader):
             if batch_idx == 0:
                 print("Running first forward pass...")
-            input_ids = batch["input_ids"].to(model_wrapper.device).contiguous()
-            attention_mask = batch["attention_mask"].to(model_wrapper.device).contiguous()
+            input_ids_cpu = batch["input_ids"].to(model_wrapper.encoder_device).contiguous()
+            attention_mask_cpu = (
+                batch["attention_mask"].to(model_wrapper.encoder_device).contiguous()
+            )
             labels = batch["label"].to(model_wrapper.device)
 
             with torch.no_grad():
                 outputs = model_wrapper.model(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
+                    input_ids=input_ids_cpu,
+                    attention_mask=attention_mask_cpu,
                 )
-                cls_embedding = outputs.last_hidden_state[:, 0, :]
+                cls_embedding = outputs.last_hidden_state[:, 0, :].to(model_wrapper.device)
 
             optimizer.zero_grad()
             logits = model_wrapper.classifier(cls_embedding)
