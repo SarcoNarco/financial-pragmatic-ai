@@ -5,13 +5,15 @@ from pydantic import BaseModel
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
 from financial_pragmatic_ai.analysis.financial_signal_engine import (
     compute_confidence,
+    compute_intent_distribution,
     compute_risk_score,
+    compute_signal_std,
     detect_volatility,
-    derive_market_prediction,
     derive_signal,
     generate_insight,
 )
 from financial_pragmatic_ai.analysis.insight_engine import extract_key_drivers
+from financial_pragmatic_ai.analysis.market_predictor import predict_market_outlook
 
 
 app = FastAPI(title="Financial Pragmatic AI API")
@@ -31,9 +33,13 @@ class TranscriptRequest(BaseModel):
     transcript: str
 
 
-@app.post("/analyze")
-def analyze_transcript(request: TranscriptRequest):
-    result = analyzer.analyze(request.transcript)
+class CompareRequest(BaseModel):
+    transcript_1: str
+    transcript_2: str
+
+
+def _run_analysis(transcript: str):
+    result = analyzer.analyze(transcript)
     results = result["segments"]
     if len(results) == 0:
         return {"error": "Could not parse transcript"}
@@ -48,22 +54,37 @@ def analyze_transcript(request: TranscriptRequest):
         score = min(max(score, 36), 64)
 
     signal = derive_signal(score)
-    prediction = derive_market_prediction(score)
     confidence = compute_confidence(results)
     volatility = detect_volatility(results)
+    volatility_std = round(compute_signal_std(results), 4)
+    intent_distribution = compute_intent_distribution(results)
+    market = predict_market_outlook(
+        signal=signal,
+        risk_score=score,
+        volatility=volatility,
+        intent_distribution=intent_distribution,
+    )
     insight = generate_insight(score, results)
     drivers = extract_key_drivers(results)
 
     return {
         "score": score,
         "signal": signal,
-        "prediction": prediction,
+        "prediction": market["prediction"],
+        "prediction_explanation": market["explanation"],
         "confidence": confidence,
         "volatility": volatility,
+        "volatility_std": volatility_std,
+        "intent_distribution": intent_distribution,
         "insight": insight,
         "segments": results,
         "drivers": drivers,
     }
+
+
+@app.post("/analyze")
+def analyze_transcript(request: TranscriptRequest):
+    return _run_analysis(request.transcript)
 
 
 @app.post("/upload")
@@ -97,34 +118,43 @@ async def upload_transcript(file: UploadFile = File(...)):
     text = text.replace("\n\n", "\n")
     text = text.strip()
 
-    result = analyzer.analyze(text)
-    results = result["segments"]
-    if len(results) == 0:
-        return {"error": "Could not parse transcript"}
+    return _run_analysis(text)
 
-    score = compute_risk_score(results)
-    signal = result["aggregation"]["dominant_signal"]
-    if signal == "risk":
-        score = max(score, 65)
-    elif signal == "growth":
-        score = min(score, 35)
+
+@app.post("/compare")
+def compare_transcripts(request: CompareRequest):
+    first = _run_analysis(request.transcript_1)
+    if "error" in first:
+        return first
+
+    second = _run_analysis(request.transcript_2)
+    if "error" in second:
+        return second
+
+    risk_delta = round(second["score"] - first["score"], 2)
+    confidence_delta = round(second["confidence"] - first["confidence"], 2)
+    signal_changed = first["signal"] != second["signal"]
+
+    if risk_delta > 0:
+        comparison_text = f"Risk increased by {abs(risk_delta):.2f}% compared to previous call."
+        trend = "UP"
+    elif risk_delta < 0:
+        comparison_text = f"Risk decreased by {abs(risk_delta):.2f}% compared to previous call."
+        trend = "DOWN"
     else:
-        score = min(max(score, 36), 64)
-
-    signal = derive_signal(score)
-    prediction = derive_market_prediction(score)
-    confidence = compute_confidence(results)
-    volatility = detect_volatility(results)
-    insight = generate_insight(score, results)
-    drivers = extract_key_drivers(results)
+        comparison_text = "Risk is unchanged compared to previous call."
+        trend = "FLAT"
 
     return {
-        "score": score,
-        "signal": signal,
-        "prediction": prediction,
-        "confidence": confidence,
-        "volatility": volatility,
-        "insight": insight,
-        "segments": results,
-        "drivers": drivers,
+        "transcript_1": first,
+        "transcript_2": second,
+        "signal_difference": {
+            "from": first["signal"],
+            "to": second["signal"],
+            "changed": signal_changed,
+        },
+        "risk_delta": risk_delta,
+        "confidence_delta": confidence_delta,
+        "trend": trend,
+        "comparison": comparison_text,
     }

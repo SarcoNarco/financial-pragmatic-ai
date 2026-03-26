@@ -411,6 +411,53 @@ input:disabled {
   word-wrap: break-word;
 }
 
+.compare-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compare-inputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.compare-inputs textarea {
+  min-height: 180px;
+}
+
+.compare-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.compare-card {
+  gap: 8px;
+}
+
+.compare-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  font-size: 12px;
+}
+
+.compare-note {
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 70ch;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.compare-delta-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 @media (max-width: 1024px) {
   .main-grid {
     grid-template-columns: minmax(0, 1fr);

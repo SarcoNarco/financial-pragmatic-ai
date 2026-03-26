@@ -13,6 +13,7 @@ export default function SummaryCard({
   volatility,
   keyDriver,
   keyConcern,
+  predictionExplanation,
 }) {
   return (
     <section className="panel summary-card">
@@ -45,6 +46,10 @@ export default function SummaryCard({
         </div>
         <div>
           <span className="label">Key Concern:</span> {keyConcern || "No risk concern detected"}
+        </div>
+        <div>
+          <span className="label">Prediction Rationale:</span>{" "}
+          {predictionExplanation || "No prediction rationale available"}
         </div>
       </div>
     </section>

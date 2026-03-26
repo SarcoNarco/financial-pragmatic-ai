@@ -25,6 +25,13 @@ const intentWeights = {
   GENERAL_UPDATE: 0,
 };
 
+const intentPointColors = {
+  EXPANSION: "#00ff9c",
+  COST_PRESSURE: "#ff4d4f",
+  STRATEGIC_PROBING: "#facc15",
+  GENERAL_UPDATE: "#9ca3af",
+};
+
 function smoothData(data, windowSize = 5) {
   return data.map((_, i, arr) => {
     const start = Math.max(0, i - windowSize);
@@ -38,6 +45,9 @@ export default function TimelineChart({ segments }) {
   const labels = segments.map((_, i) => `Step ${i + 1}`);
   const signalData = segments.map((s) => intentWeights[s.intent] ?? 0);
   const smoothedData = smoothData(signalData);
+  const pointColors = segments.map(
+    (segment) => intentPointColors[segment.intent] || intentPointColors.GENERAL_UPDATE
+  );
 
   const data = {
     labels,
@@ -46,21 +56,25 @@ export default function TimelineChart({ segments }) {
         label: "Conversation Flow",
         data: smoothedData,
         fill: true,
-        tension: 0.4,
+        tension: 0.45,
         borderWidth: 2,
-        borderColor: "#569cd6",
+        borderColor: "#3b82f6",
         backgroundColor: (context) => {
           const chart = context.chart;
           const { ctx, chartArea } = chart;
           if (!chartArea) {
-            return "rgba(86, 156, 214, 0.15)";
+            return "rgba(59, 130, 246, 0.15)";
           }
           const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          gradient.addColorStop(0, "rgba(86, 156, 214, 0.40)");
-          gradient.addColorStop(1, "rgba(86, 156, 214, 0.03)");
+          gradient.addColorStop(0, "rgba(59, 130, 246, 0.30)");
+          gradient.addColorStop(1, "rgba(59, 130, 246, 0.03)");
           return gradient;
         },
-        pointRadius: 0,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        pointBackgroundColor: pointColors,
+        pointBorderColor: "#0b0f14",
+        pointBorderWidth: 1,
       },
     ],
   };
@@ -71,10 +85,10 @@ export default function TimelineChart({ segments }) {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "#252526",
-        titleColor: "#d4d4d4",
-        bodyColor: "#d4d4d4",
-        borderColor: "#333",
+        backgroundColor: "#121821",
+        titleColor: "#d1d5db",
+        bodyColor: "#d1d5db",
+        borderColor: "#1f2a37",
         borderWidth: 1,
         callbacks: {
           title: (items) => {
@@ -96,14 +110,20 @@ export default function TimelineChart({ segments }) {
         },
       },
     },
+    animations: {
+      tension: {
+        duration: 700,
+        easing: "easeOutCubic",
+      },
+    },
     scales: {
       x: {
-        ticks: { color: "#d4d4d4" },
-        grid: { color: "#333" },
+        ticks: { color: "#9ca3af" },
+        grid: { color: "#1f2a37" },
       },
       y: {
         ticks: {
-          color: "#d4d4d4",
+          color: "#9ca3af",
           stepSize: 0.5,
           callback: (value) => {
             if (value === 1) return "Growth";
@@ -114,7 +134,7 @@ export default function TimelineChart({ segments }) {
         },
         min: -1,
         max: 1,
-        grid: { color: "#333" },
+        grid: { color: "#1f2a37" },
       },
     },
   };

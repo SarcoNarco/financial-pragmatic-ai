@@ -25,8 +25,76 @@ Analyst: What is the timeline for margin recovery?`,
 function getToneClass(value) {
   const normalized = String(value || "").toLowerCase();
   if (["growth", "up", "low"].includes(normalized)) return "growth";
-  if (["risk", "down", "high"].includes(normalized)) return "risk";
+  if (["risk", "down", "high", "volatile"].includes(normalized)) return "risk";
   return "neutral";
+}
+
+function extractDrivers(analysis) {
+  const segments = analysis?.segments || [];
+  const growthFromSegments = segments
+    .filter((segment) => segment.intent === "EXPANSION")
+    .map((segment) => segment.text)
+    .slice(0, 3);
+
+  const riskFromSegments = segments
+    .filter(
+      (segment) =>
+        segment.intent === "COST_PRESSURE" || segment.intent === "STRATEGIC_PROBING"
+    )
+    .map((segment) => segment.text)
+    .slice(0, 3);
+
+  return {
+    growth: growthFromSegments.length
+      ? growthFromSegments
+      : (analysis?.drivers?.growth_drivers || []).slice(0, 3),
+    risk: riskFromSegments.length
+      ? riskFromSegments
+      : (analysis?.drivers?.risk_drivers || []).slice(0, 3),
+  };
+}
+
+function CompactCompareSummary({ title, analysis }) {
+  const drivers = extractDrivers(analysis);
+  return (
+    <section className="panel compare-card">
+      <div className="panel-title">{title}</div>
+      <div className="compare-metrics">
+        <div>
+          <span className="metric-label">Signal:</span>{" "}
+          <span className={getToneClass(analysis?.signal)}>
+            {(analysis?.signal || "neutral").toUpperCase()}
+          </span>
+        </div>
+        <div>
+          <span className="metric-label">Risk:</span> {analysis?.score ?? "-"}
+        </div>
+        <div>
+          <span className="metric-label">Prediction:</span>{" "}
+          <span className={getToneClass(analysis?.prediction)}>
+            {(analysis?.prediction || "NEUTRAL").toUpperCase()}
+          </span>
+        </div>
+        <div>
+          <span className="metric-label">Confidence:</span> {analysis?.confidence ?? "-"}%
+        </div>
+        <div>
+          <span className="metric-label">Volatility:</span>{" "}
+          <span className={getToneClass(analysis?.volatility)}>
+            {(analysis?.volatility || "-").toUpperCase()}
+          </span>
+        </div>
+      </div>
+      <div className="compare-note">
+        <span className="metric-label">Top Driver:</span>{" "}
+        {drivers.growth[0] || "No growth driver detected"}
+      </div>
+      <div className="compare-note">
+        <span className="metric-label">Top Concern:</span>{" "}
+        {drivers.risk[0] || "No risk concern detected"}
+      </div>
+    </section>
+  );
 }
 
 function App() {
@@ -38,34 +106,16 @@ function App() {
   const [result, setResult] = useState(null);
   const [demoCase, setDemoCase] = useState("growth");
 
-  const data = result;
+  const [compareTranscript1, setCompareTranscript1] = useState(DEMO_TRANSCRIPTS.growth);
+  const [compareTranscript2, setCompareTranscript2] = useState(DEMO_TRANSCRIPTS.risk);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState("");
+  const [compareResult, setCompareResult] = useState(null);
 
+  const data = result;
   const analyzedSegments = data?.segments || [];
 
-  const extractedDrivers = useMemo(() => {
-    const growthFromSegments = analyzedSegments
-      .filter((segment) => segment.intent === "EXPANSION")
-      .map((segment) => segment.text)
-      .slice(0, 3);
-
-    const riskFromSegments = analyzedSegments
-      .filter(
-        (segment) =>
-          segment.intent === "COST_PRESSURE" || segment.intent === "STRATEGIC_PROBING"
-      )
-      .map((segment) => segment.text)
-      .slice(0, 3);
-
-    return {
-      growth: growthFromSegments.length
-        ? growthFromSegments
-        : (data?.drivers?.growth_drivers || []).slice(0, 3),
-      risk: riskFromSegments.length
-        ? riskFromSegments
-        : (data?.drivers?.risk_drivers || []).slice(0, 3),
-    };
-  }, [analyzedSegments, data?.drivers]);
-
+  const extractedDrivers = useMemo(() => extractDrivers(data), [data]);
   const growthDrivers = extractedDrivers.growth;
   const riskDrivers = extractedDrivers.risk;
 
@@ -145,6 +195,36 @@ function App() {
     }
   };
 
+  const compareTranscripts = async () => {
+    if (!compareTranscript1.trim() || !compareTranscript2.trim()) {
+      setCompareError("Please enter both transcripts");
+      return;
+    }
+
+    setCompareLoading(true);
+    setCompareError("");
+
+    try {
+      const response = await axios.post("http://127.0.0.1:8000/compare", {
+        transcript_1: compareTranscript1,
+        transcript_2: compareTranscript2,
+      });
+
+      if (response.data?.error) {
+        setCompareResult(null);
+        setCompareError("Comparison failed. Try again.");
+        return;
+      }
+
+      setCompareResult(response.data);
+    } catch (_err) {
+      setCompareResult(null);
+      setCompareError("Comparison failed. Try again.");
+    } finally {
+      setCompareLoading(false);
+    }
+  };
+
   const loadSampleTranscript = async () => {
     const selected = DEMO_TRANSCRIPTS[demoCase];
     setTranscript(selected);
@@ -159,23 +239,30 @@ function App() {
             <button
               className={activeTab === "analyze" ? "tab active" : "tab"}
               onClick={() => setActiveTab("analyze")}
-              disabled={loading}
+              disabled={loading || compareLoading}
             >
               Analyze
             </button>
             <button
               className={activeTab === "insights" ? "tab active" : "tab"}
               onClick={() => setActiveTab("insights")}
-              disabled={loading}
+              disabled={loading || compareLoading}
             >
               Insights
             </button>
             <button
               className={activeTab === "demo" ? "tab active" : "tab"}
               onClick={() => setActiveTab("demo")}
-              disabled={loading}
+              disabled={loading || compareLoading}
             >
               Demo
+            </button>
+            <button
+              className={activeTab === "compare" ? "tab active" : "tab"}
+              onClick={() => setActiveTab("compare")}
+              disabled={loading || compareLoading}
+            >
+              Compare
             </button>
           </nav>
 
@@ -226,6 +313,7 @@ function App() {
                   volatility={data?.volatility}
                   keyDriver={growthDrivers[0]}
                   keyConcern={riskDrivers[0]}
+                  predictionExplanation={data?.prediction_explanation}
                 />
 
                 <section className="panel graph-panel">
@@ -335,16 +423,16 @@ function App() {
                 <section className="panel nested-panel">
                   <div className="panel-title">Confidence</div>
                   <p className="insight-line">
-                    Confidence is based on consistency of detected intent patterns across the
-                    transcript. More agreement across segments yields higher confidence.
+                    Confidence is based on consistency of dominant conversation signals across
+                    segments. Higher agreement means stronger confidence in the final outlook.
                   </p>
                 </section>
 
                 <section className="panel nested-panel">
                   <div className="panel-title">Volatility</div>
                   <p className="insight-line">
-                    Volatility measures fluctuation in intent over time. Frequent shifts between
-                    growth and risk signals indicate higher uncertainty.
+                    Volatility is derived from variation in signal trajectory over time. Higher
+                    variance indicates unstable communication patterns.
                   </p>
                   <p className={`insight-line ${getToneClass(data?.volatility)}`}>
                     Current volatility: {(data?.volatility || "-").toUpperCase()}
@@ -381,6 +469,92 @@ function App() {
                 <div className="panel-title">Sample Preview</div>
                 <pre className="demo-preview">{DEMO_TRANSCRIPTS[demoCase]}</pre>
               </section>
+            </section>
+          ) : null}
+
+          {activeTab === "compare" ? (
+            <section className="panel compare-tab">
+              <div className="panel-title">Multi-Transcript Comparison</div>
+
+              <div className="compare-inputs">
+                <section className="panel nested-panel">
+                  <div className="panel-title">Transcript A</div>
+                  <textarea
+                    value={compareTranscript1}
+                    onChange={(event) => setCompareTranscript1(event.target.value)}
+                    disabled={compareLoading}
+                  />
+                </section>
+
+                <section className="panel nested-panel">
+                  <div className="panel-title">Transcript B</div>
+                  <textarea
+                    value={compareTranscript2}
+                    onChange={(event) => setCompareTranscript2(event.target.value)}
+                    disabled={compareLoading}
+                  />
+                </section>
+              </div>
+
+              <button onClick={compareTranscripts} disabled={compareLoading}>
+                {compareLoading ? "Comparing..." : "Compare"}
+              </button>
+
+              {compareLoading ? (
+                <div className="loading-row">
+                  <span className="spinner" />
+                  <span>Comparing transcripts...</span>
+                </div>
+              ) : null}
+
+              {compareError ? <p className="error">{compareError}</p> : null}
+
+              {compareResult ? (
+                <>
+                  <div className="compare-summary-grid">
+                    <CompactCompareSummary
+                      title="Transcript A Summary"
+                      analysis={compareResult.transcript_1}
+                    />
+                    <CompactCompareSummary
+                      title="Transcript B Summary"
+                      analysis={compareResult.transcript_2}
+                    />
+                  </div>
+
+                  <section className="panel nested-panel compare-delta-panel">
+                    <div className="panel-title">Delta Metrics</div>
+                    <div className="compare-metrics">
+                      <div>
+                        <span className="metric-label">Signal Shift:</span>{" "}
+                        {(compareResult.signal_difference?.from || "neutral").toUpperCase()} →{" "}
+                        {(compareResult.signal_difference?.to || "neutral").toUpperCase()}
+                      </div>
+                      <div>
+                        <span className="metric-label">Risk Delta:</span>{" "}
+                        <span className={compareResult.risk_delta > 0 ? "risk" : compareResult.risk_delta < 0 ? "growth" : "neutral"}>
+                          {compareResult.risk_delta > 0 ? "+" : ""}
+                          {compareResult.risk_delta}%
+                        </span>
+                      </div>
+                      <div>
+                        <span className="metric-label">Confidence Delta:</span>{" "}
+                        <span className={compareResult.confidence_delta >= 0 ? "growth" : "risk"}>
+                          {compareResult.confidence_delta > 0 ? "+" : ""}
+                          {compareResult.confidence_delta}%
+                        </span>
+                      </div>
+                      <div>
+                        <span className="metric-label">Trend:</span>{" "}
+                        <span className={getToneClass(compareResult.trend === "UP" ? "risk" : compareResult.trend === "DOWN" ? "growth" : "neutral")}>
+                          {compareResult.trend}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="insight-line">{compareResult.comparison}</p>
+                  </section>
+                </>
+              ) : null}
             </section>
           ) : null}
         </main>

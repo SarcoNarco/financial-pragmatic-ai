@@ -1,3 +1,16 @@
+import statistics
+
+
+INTENT_TO_SIGNAL = {
+    "EXPANSION": "growth",
+    "GENERAL_UPDATE": "neutral",
+    "STRATEGIC_PROBING": "risk",
+    "COST_PRESSURE": "risk",
+}
+
+SIGNAL_TO_VALUE = {"growth": -1.0, "neutral": 0.0, "risk": 1.0}
+
+
 def compute_risk_score(intents):
     score = 45
 
@@ -67,14 +80,15 @@ def generate_insight(score, intents):
 
 
 def compute_confidence(intents):
-    counts = {}
+    counts = {"growth": 0, "neutral": 0, "risk": 0}
     total = len(intents)
 
     if total == 0:
         return 0.0
 
     for item in intents:
-        counts[item["intent"]] = counts.get(item["intent"], 0) + 1
+        signal = INTENT_TO_SIGNAL.get(item["intent"], "neutral")
+        counts[signal] = counts.get(signal, 0) + 1
 
     dominant = max(counts.values())
     confidence = dominant / total
@@ -82,21 +96,46 @@ def compute_confidence(intents):
     return round(confidence * 100, 2)
 
 
+def compute_signal_std(intents):
+    if len(intents) <= 1:
+        return 0.0
+
+    series = []
+    for item in intents:
+        signal = INTENT_TO_SIGNAL.get(item["intent"], "neutral")
+        series.append(SIGNAL_TO_VALUE[signal])
+
+    return float(statistics.pstdev(series))
+
+
 def detect_volatility(intents):
     if len(intents) <= 1:
         return "LOW"
 
-    changes = 0
-
-    for i in range(1, len(intents)):
-        if intents[i]["intent"] != intents[i - 1]["intent"]:
-            changes += 1
-
-    volatility_ratio = changes / len(intents)
-
-    if volatility_ratio > 0.5:
+    volatility_std = compute_signal_std(intents)
+    if volatility_std >= 0.75:
         return "HIGH"
-    elif volatility_ratio > 0.3:
+    elif volatility_std >= 0.35:
         return "MEDIUM"
     else:
         return "LOW"
+
+
+def compute_intent_distribution(intents):
+    total = len(intents)
+    counts = {
+        "EXPANSION": 0,
+        "GENERAL_UPDATE": 0,
+        "STRATEGIC_PROBING": 0,
+        "COST_PRESSURE": 0,
+    }
+
+    for item in intents:
+        intent = item.get("intent", "GENERAL_UPDATE")
+        if intent in counts:
+            counts[intent] += 1
+
+    if total == 0:
+        return {key: 0.0 for key in counts}
+
+    return {key: round((value / total) * 100, 2) for key, value in counts.items()}
