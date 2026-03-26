@@ -151,8 +151,6 @@ def train_finbert_intent_model(
     for epoch in range(epochs):
         total_loss = 0.0
         for batch in loader:
-            print("First batch reached")
-            break
             input_ids = batch["input_ids"].to(model_wrapper.device)
             attention_mask = batch["attention_mask"].to(model_wrapper.device)
             labels = batch["label"].to(model_wrapper.device)

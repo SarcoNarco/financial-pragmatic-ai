@@ -49,53 +49,42 @@ def _assign_signal(ceo_intent: str, cfo_intent: str, analyst_intent: str) -> str
     return "neutral"
 
 
-def build_conversation_sequences(df: pd.DataFrame) -> List[Dict[str, object]]:
-    """
-    Build ordered CEO -> CFO -> ANALYST sequences from pragmatic intent rows.
-    Invalid and incomplete sequences are skipped.
-    """
-    cleaned_rows: List[Dict[str, str]] = []
+def build_conversation_sequences(df: pd.DataFrame):
+    sequences = []
+
+    cleaned_rows = []
     for _, row in df.iterrows():
         cleaned = _clean_row(row)
         if cleaned is not None:
             cleaned_rows.append(cleaned)
 
-    sequences: List[Dict[str, object]] = []
-    pending_ceo: Dict[str, str] | None = None
-    pending_cfo: Dict[str, str] | None = None
+    for i in range(len(cleaned_rows) - 2):
+        window = cleaned_rows[i:i+3]
 
-    for row in cleaned_rows:
-        speaker = row["speaker"]
+        speakers = [row["speaker"] for row in window]
 
-        if speaker == "CEO":
-            pending_ceo = row
-            pending_cfo = None
+        # must contain all 3 roles
+        if not all(role in speakers for role in ["CEO", "CFO", "ANALYST"]):
             continue
 
-        if speaker == "CFO":
-            if pending_ceo is not None and pending_cfo is None:
-                pending_cfo = row
-            continue
+        texts = [row["text"] for row in window]
+        intents = [row["intent"] for row in window]
 
-        if speaker == "ANALYST":
-            if pending_ceo is not None and pending_cfo is not None:
-                texts = [pending_ceo["text"], pending_cfo["text"], row["text"]]
-                intents = [pending_ceo["intent"], pending_cfo["intent"], row["intent"]]
-                speakers = ["CEO", "CFO", "ANALYST"]
-                signal = _assign_signal(intents[0], intents[1], intents[2])
+        # map roles properly
+        role_map = {row["speaker"]: row for row in window}
 
-                sequences.append(
-                    {
-                        "texts": texts,
-                        "intents": intents,
-                        "speakers": speakers,
-                        "signal": signal,
-                    }
-                )
+        ceo_intent = role_map["CEO"]["intent"]
+        cfo_intent = role_map["CFO"]["intent"]
+        analyst_intent = role_map["ANALYST"]["intent"]
 
-            pending_ceo = None
-            pending_cfo = None
-            continue
+        signal = _assign_signal(ceo_intent, cfo_intent, analyst_intent)
+
+        sequences.append({
+            "texts": texts,
+            "intents": intents,
+            "speakers": speakers,
+            "signal": signal,
+        })
 
     return sequences
 
