@@ -136,6 +136,7 @@ def train_finbert_intent_model(
     if not resolved_dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {resolved_dataset_path}")
 
+    print("Loading dataset...")
     frame = pd.read_csv(resolved_dataset_path)
     frame = frame.rename(columns={column: column.strip().lower() for column in frame.columns})
 
@@ -146,16 +147,15 @@ def train_finbert_intent_model(
     frame["intent"] = frame["intent"].fillna("GENERAL_UPDATE").astype(str).str.upper()
     frame = frame[frame["intent"].isin(INTENT_LABELS)].reset_index(drop=True)
 
+    print("Initializing model...")
     model_wrapper = FinBERTIntentModel()
+    print("Creating dataset (THIS IS TOKENIZATION)...")
     dataset = IntentTextDataset(frame, model_wrapper.tokenizer, max_length=max_length)
-    loader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=0,
-        pin_memory=(torch.cuda.is_available() or torch.backends.mps.is_available()),
-    )
-    print("DataLoader initialized. Starting training...")
+    print("Dataset ready.")
+
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+
+    print("Starting training loop...")
     model_wrapper.model.train()
     optimizer = AdamW(model_wrapper.model.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
