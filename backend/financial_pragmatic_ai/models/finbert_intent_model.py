@@ -11,7 +11,9 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 from transformers import AutoModel, AutoTokenizer
 
-torch.set_num_threads(2)
+# Let PyTorch use all available CPU cores for BERT inference
+# (torch.set_num_threads(2) was here — removed because it throttled
+# CPU-based BERT forward passes to ~30-60s per batch)
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.benchmark = True
@@ -195,11 +197,14 @@ def train_finbert_intent_model(
     optimizer = AdamW(model_wrapper.classifier.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
 
-    print("Precomputing CLS embeddings...")
+    total_batches = len(loader)
+    print(f"Precomputing CLS embeddings... ({total_batches} batches)")
     all_embeddings = []
     all_labels = []
     with torch.no_grad():
-        for batch in loader:
+        for batch_idx, batch in enumerate(loader):
+            if batch_idx % 10 == 0:
+                print(f"  Embedding batch {batch_idx + 1}/{total_batches}")
             input_ids_cpu = batch["input_ids"].to(model_wrapper.encoder_device)
             attention_mask_cpu = batch["attention_mask"].to(model_wrapper.encoder_device)
             labels = batch["label"]
