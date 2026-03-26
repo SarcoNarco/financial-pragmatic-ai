@@ -5,9 +5,11 @@ import torch
 from torch import nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from transformers import AutoTokenizer, BertForSequenceClassification
 
 torch.set_num_threads(2)
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.enabled = True
 
@@ -76,11 +78,12 @@ class FinBERTIntentModel:
     def __init__(self, model_name: str = MODEL_NAME, device: torch.device | None = None):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(
+        self.model = BertForSequenceClassification.from_pretrained(
             model_name,
             num_labels=len(INTENT_LABELS),
             ignore_mismatched_sizes=True,
         )
+        self.model = self.model.float()
         self.model.to(self.device)
         self.model.eval()
 
@@ -167,13 +170,11 @@ def train_finbert_intent_model(
 
     print("Warming up model...")
     with torch.no_grad():
-        sample = next(iter(loader))
-        sample_input_ids = sample["input_ids"].to(model_wrapper.device)
-        sample_attention_mask = sample["attention_mask"].to(model_wrapper.device)
+        dummy_input = torch.randint(0, 1000, (2, 64)).to(model_wrapper.device)
+        dummy_mask = torch.ones_like(dummy_input).to(model_wrapper.device)
         _ = model_wrapper.model(
-            input_ids=sample_input_ids,
-            attention_mask=sample_attention_mask,
-            return_dict=True,
+            input_ids=dummy_input,
+            attention_mask=dummy_mask,
         )
     print("Warmup complete.")
 
@@ -189,8 +190,6 @@ def train_finbert_intent_model(
             outputs = model_wrapper.model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                return_dict=True,
-                use_cache=False,
             )
             loss = criterion(outputs.logits, labels)
 
