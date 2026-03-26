@@ -333,3 +333,53 @@ Current practical reality:
 - When changing inference behavior, keep fallback compatibility unless explicitly removing legacy support.
 - Prefer adding tests and evaluators before changing model/rule thresholds.
 - If behavior is uncertain, mark as **Not implemented** rather than guessing.
+
+---
+
+## 11. CURRENT DEBUGGING STATE (CRITICAL)
+
+### Problem
+
+- Training hangs at the FIRST forward pass of the FinBERT model.
+- Logs consistently show:
+  - `"Starting training loop..."`
+  - `"First batch executing..."`
+  - then no further progress.
+
+### Confirmed Working
+
+- Dataset loading works.
+- Pre-tokenization is implemented (tokenization moved to `Dataset.__init__`).
+- DataLoader works.
+- GPU transfer works.
+- Model loads correctly.
+
+### Confirmed NOT Working
+
+- Forward pass of the HuggingFace model stalls.
+- Stall persists even after:
+  - removing AMP
+  - adding CUDA warmup
+  - enabling cuDNN optimizations
+  - limiting CPU threads
+
+### Suspected Root Cause
+
+- HuggingFace model execution issue in the current environment (Colab CUDA runtime).
+- Possible attention kernel / backend incompatibility.
+
+### Constraints
+
+- Do NOT change model architecture significantly.
+- Do NOT rewrite the pipeline.
+- Must keep:
+  - FinBERT backbone
+  - existing training loop structure
+  - intent classification logic
+
+### Goal for Next Agent
+
+- Identify why the forward pass stalls.
+- Provide a stable execution fix.
+- Ensure training progresses to:
+  - `"Epoch 1/4 Loss ..."`
