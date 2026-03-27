@@ -197,10 +197,16 @@ def train_finbert_intent_model(
     optimizer = AdamW(model_wrapper.classifier.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
 
+    n_samples = len(dataset)
+    embed_dim = 768
     total_batches = len(loader)
-    print(f"Precomputing CLS embeddings... ({total_batches} batches)")
-    all_embeddings = []
-    all_labels = []
+
+    # Pre-allocate on CPU — avoids list accumulation and large torch.cat on RAM
+    X = torch.zeros(n_samples, embed_dim, dtype=torch.float32)
+    y = torch.zeros(n_samples, dtype=torch.long)
+
+    print(f"Precomputing CLS embeddings... ({total_batches} batches, {n_samples} samples)")
+    offset = 0
     with torch.no_grad():
         for batch_idx, batch in enumerate(loader):
             if batch_idx % 20 == 0:
@@ -208,16 +214,25 @@ def train_finbert_intent_model(
             input_ids_cpu = batch["input_ids"].to(model_wrapper.encoder_device)
             attention_mask_cpu = batch["attention_mask"].to(model_wrapper.encoder_device)
             labels = batch["label"]
+
             outputs = model_wrapper.model(
                 input_ids=input_ids_cpu,
                 attention_mask=attention_mask_cpu,
             )
-            cls_embedding = outputs.last_hidden_state[:, 0, :]
-            all_embeddings.append(cls_embedding)
-            all_labels.append(labels)
+            # Write directly into pre-allocated slice; move to CPU immediately
+            cls = outputs.last_hidden_state[:, 0, :].detach().cpu()
+            n = cls.size(0)
+            X[offset : offset + n] = cls
+            y[offset : offset + n] = labels
+            offset += n
 
-    X = torch.cat(all_embeddings, dim=0).to(model_wrapper.device)
-    y = torch.cat(all_labels, dim=0).to(model_wrapper.device)
+            # Free intermediates immediately
+            del outputs, cls, input_ids_cpu, attention_mask_cpu
+            torch.cuda.empty_cache()
+
+    # Single GPU transfer at the end
+    X = X[:offset].to(model_wrapper.device)
+    y = y[:offset].to(model_wrapper.device)
 
     train_dataset = TensorDataset(X, y)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
