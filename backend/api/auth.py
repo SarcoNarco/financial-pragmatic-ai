@@ -1,14 +1,14 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy.orm import Session
 
-from api.db import get_db
-from api.models import User
+from api.database import users_collection
 
 
 SECRET_KEY = "financial-pragmatic-ai-secret-change-me"
@@ -36,10 +36,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
-) -> User:
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -48,13 +45,20 @@ def get_current_user(
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int | None = payload.get("sub")
+        user_id = payload.get("sub")
         if user_id is None:
             raise credentials_exception
     except JWTError as exc:
         raise credentials_exception from exc
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    try:
+        object_id = ObjectId(user_id)
+    except (InvalidId, TypeError) as exc:
+        raise credentials_exception from exc
+
+    user = await users_collection.find_one({"_id": object_id})
     if user is None:
         raise credentials_exception
+
+    user["id"] = str(user["_id"])
     return user

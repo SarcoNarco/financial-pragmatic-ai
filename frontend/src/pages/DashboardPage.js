@@ -156,7 +156,7 @@ export default function DashboardPage({ token, onLogout }) {
     setCompareLoading(true);
     setCompareError("");
     try {
-      const compared = await compareAnalyses(token, Number(compareA), Number(compareB));
+      const compared = await compareAnalyses(token, compareA, compareB);
       setCompareResult(compared);
     } catch (_err) {
       setCompareResult(null);

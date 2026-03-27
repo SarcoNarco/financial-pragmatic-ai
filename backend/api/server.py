@@ -1,9 +1,11 @@
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
+from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from pymongo.errors import DuplicateKeyError
 
 from api.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -12,8 +14,7 @@ from api.auth import (
     hash_password,
     verify_password,
 )
-from api.db import Base, engine, get_db
-from api.models import Analysis, Transcript, User
+from api.database import analyses_collection, init_database, transcripts_collection, users_collection
 from api.schemas import AuthRequest, AuthResponse, CompareRequest, SaveAnalysisRequest, TranscriptRequest
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
 from financial_pragmatic_ai.analysis.financial_signal_engine import (
@@ -29,8 +30,6 @@ from financial_pragmatic_ai.analysis.insight_engine import extract_key_drivers
 from financial_pragmatic_ai.analysis.market_predictor import predict_market_outlook
 
 
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="Financial Pragmatic AI API")
 
 app.add_middleware(
@@ -42,6 +41,11 @@ app.add_middleware(
 )
 
 analyzer = EarningsCallAnalyzer()
+
+
+@app.on_event("startup")
+async def startup_event():
+    await init_database()
 
 
 def _run_analysis(transcript: str):
@@ -88,87 +92,112 @@ def _run_analysis(transcript: str):
     }
 
 
-def _serialize_analysis_row(analysis: Analysis, transcript_text: str | None = None):
-    return {
-        "id": analysis.id,
-        "transcript_id": analysis.transcript_id,
-        "transcript": transcript_text,
-        "signal": analysis.signal,
-        "prediction": analysis.prediction,
-        "confidence": analysis.confidence,
-        "volatility": analysis.volatility,
-        "score": analysis.score,
-        "drivers": json.loads(analysis.drivers),
-        "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+def _safe_iso(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return None
+
+
+def _serialize_analysis_doc(doc: dict, include_text: bool = False):
+    payload = {
+        "id": str(doc["_id"]),
+        "transcript_id": doc.get("transcript_id"),
+        "signal": doc.get("signal"),
+        "prediction": doc.get("prediction"),
+        "confidence": doc.get("confidence"),
+        "volatility": doc.get("volatility"),
+        "score": doc.get("score"),
+        "drivers": doc.get("drivers", {}),
+        "created_at": _safe_iso(doc.get("created_at")),
     }
+    if include_text:
+        payload["transcript"] = doc.get("text", "")
+    return payload
 
 
-def _save_analysis_for_user(db: Session, user: User, transcript_text: str, analysis_result: dict):
-    transcript = Transcript(user_id=user.id, text=transcript_text)
-    db.add(transcript)
-    db.commit()
-    db.refresh(transcript)
-
-    analysis_row = Analysis(
-        transcript_id=transcript.id,
-        signal=str(analysis_result.get("signal", "neutral")),
-        prediction=str(analysis_result.get("prediction", "NEUTRAL")),
-        confidence=float(analysis_result.get("confidence", 0.0)),
-        volatility=str(analysis_result.get("volatility", "LOW")),
-        drivers=json.dumps(analysis_result.get("drivers", {})),
-        score=float(analysis_result.get("score", 50.0)),
-    )
-    db.add(analysis_row)
-    db.commit()
-    db.refresh(analysis_row)
-
-    return transcript, analysis_row
+def _object_id_or_404(value: str, message: str = "Invalid ID") -> ObjectId:
+    try:
+        return ObjectId(value)
+    except (InvalidId, TypeError) as exc:
+        raise HTTPException(status_code=404, detail=message) from exc
 
 
-def _analyze_and_save_for_user(db: Session, user: User, transcript_text: str):
+async def _save_analysis_for_user(user_id: str, transcript_text: str, analysis_result: dict):
+    now = datetime.now(timezone.utc)
+    transcript_doc = {
+        "user_id": user_id,
+        "text": transcript_text,
+        "created_at": now,
+    }
+    transcript_result = await transcripts_collection.insert_one(transcript_doc)
+    transcript_id = str(transcript_result.inserted_id)
+
+    analysis_doc = {
+        "user_id": user_id,
+        "transcript_id": transcript_id,
+        "text": transcript_text,
+        "signal": str(analysis_result.get("signal", "neutral")),
+        "prediction": str(analysis_result.get("prediction", "NEUTRAL")),
+        "confidence": float(analysis_result.get("confidence", 0.0)),
+        "volatility": str(analysis_result.get("volatility", "LOW")),
+        "drivers": analysis_result.get("drivers", {}),
+        "score": float(analysis_result.get("score", 50.0)),
+        "created_at": now,
+    }
+    analysis_result_db = await analyses_collection.insert_one(analysis_doc)
+    return transcript_id, str(analysis_result_db.inserted_id)
+
+
+async def _analyze_and_save_for_user(user_id: str, transcript_text: str):
     analysis = _run_analysis(transcript_text)
     if "error" in analysis:
         return analysis
 
-    transcript, analysis_row = _save_analysis_for_user(db, user, transcript_text, analysis)
+    transcript_id, analysis_id = await _save_analysis_for_user(user_id, transcript_text, analysis)
     return {
         "analysis": analysis,
-        "analysis_id": analysis_row.id,
-        "transcript_id": transcript.id,
+        "analysis_id": analysis_id,
+        "transcript_id": transcript_id,
     }
 
 
 @app.post("/auth/signup", response_model=AuthResponse)
-def signup(payload: AuthRequest, db: Session = Depends(get_db)):
+async def signup(payload: AuthRequest):
     email = payload.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="Invalid email")
 
-    existing = db.query(User).filter(User.email == email).first()
+    existing = await users_collection.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    user = User(email=email, password_hash=hash_password(payload.password))
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    user_doc = {
+        "email": email,
+        "password_hash": hash_password(payload.password),
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    try:
+        insert_result = await users_collection.insert_one(user_doc)
+    except DuplicateKeyError as exc:
+        raise HTTPException(status_code=400, detail="Email already registered") from exc
 
     token = create_access_token(
-        data={"sub": str(user.id)},
+        data={"sub": str(insert_result.inserted_id)},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return AuthResponse(access_token=token)
 
 
 @app.post("/auth/login", response_model=AuthResponse)
-def login(payload: AuthRequest, db: Session = Depends(get_db)):
+async def login(payload: AuthRequest):
     email = payload.email.strip().lower()
-    user = db.query(User).filter(User.email == email).first()
-    if user is None or not verify_password(payload.password, user.password_hash):
+    user = await users_collection.find_one({"email": email})
+    if user is None or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = create_access_token(
-        data={"sub": str(user.id)},
+        data={"sub": str(user["_id"])},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return AuthResponse(access_token=token)
@@ -180,70 +209,54 @@ def analyze_transcript(request: TranscriptRequest):
 
 
 @app.post("/save-analysis")
-def save_analysis(
+async def save_analysis(
     request: SaveAnalysisRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
-    return _analyze_and_save_for_user(db, current_user, request.transcript)
+    return await _analyze_and_save_for_user(current_user["id"], request.transcript)
 
 
 @app.get("/history")
-def get_history(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    rows = (
-        db.query(Analysis, Transcript)
-        .join(Transcript, Analysis.transcript_id == Transcript.id)
-        .filter(Transcript.user_id == current_user.id)
-        .order_by(Analysis.created_at.desc())
-        .all()
+async def get_history(current_user: dict = Depends(get_current_user)):
+    docs = (
+        await analyses_collection.find({"user_id": current_user["id"]})
+        .sort("created_at", -1)
+        .to_list(length=100)
     )
 
     history = []
-    for analysis, transcript in rows:
+    for doc in docs:
         history.append(
             {
-                "id": analysis.id,
-                "transcript_id": transcript.id,
-                "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
-                "signal": analysis.signal,
-                "prediction": analysis.prediction,
-                "confidence": analysis.confidence,
-                "volatility": analysis.volatility,
-                "score": analysis.score,
-                "transcript_preview": transcript.text[:220],
+                "id": str(doc["_id"]),
+                "transcript_id": doc.get("transcript_id"),
+                "created_at": _safe_iso(doc.get("created_at")),
+                "signal": doc.get("signal"),
+                "prediction": doc.get("prediction"),
+                "confidence": doc.get("confidence"),
+                "volatility": doc.get("volatility"),
+                "score": doc.get("score"),
+                "transcript_preview": str(doc.get("text", ""))[:220],
             }
         )
     return {"items": history}
 
 
 @app.get("/analysis/{analysis_id}")
-def get_analysis(
-    analysis_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    row = (
-        db.query(Analysis, Transcript)
-        .join(Transcript, Analysis.transcript_id == Transcript.id)
-        .filter(Analysis.id == analysis_id, Transcript.user_id == current_user.id)
-        .first()
-    )
+async def get_analysis(analysis_id: str, current_user: dict = Depends(get_current_user)):
+    object_id = _object_id_or_404(analysis_id, message="Analysis not found")
+    doc = await analyses_collection.find_one({"_id": object_id, "user_id": current_user["id"]})
 
-    if row is None:
+    if doc is None:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
-    analysis, transcript = row
-    return _serialize_analysis_row(analysis, transcript_text=transcript.text)
+    return _serialize_analysis_doc(doc, include_text=True)
 
 
 @app.post("/upload")
 async def upload_transcript(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     content = await file.read()
     filename = file.filename.lower()
@@ -274,38 +287,29 @@ async def upload_transcript(
     text = text.replace("\n\n", "\n")
     text = text.strip()
 
-    saved = _analyze_and_save_for_user(db, current_user, text)
+    saved = await _analyze_and_save_for_user(current_user["id"], text)
     if "error" in saved:
         return saved
 
-    # Keep upload response aligned with /analyze payload.
     return saved["analysis"]
 
 
 @app.post("/compare")
-def compare_transcripts(
+async def compare_transcripts(
     request: CompareRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     if request.analysis_id_1 is not None and request.analysis_id_2 is not None:
-        first_row = (
-            db.query(Analysis, Transcript)
-            .join(Transcript, Analysis.transcript_id == Transcript.id)
-            .filter(Analysis.id == request.analysis_id_1, Transcript.user_id == current_user.id)
-            .first()
-        )
-        second_row = (
-            db.query(Analysis, Transcript)
-            .join(Transcript, Analysis.transcript_id == Transcript.id)
-            .filter(Analysis.id == request.analysis_id_2, Transcript.user_id == current_user.id)
-            .first()
-        )
-        if first_row is None or second_row is None:
+        first_id = _object_id_or_404(request.analysis_id_1, message="One or both analyses not found")
+        second_id = _object_id_or_404(request.analysis_id_2, message="One or both analyses not found")
+
+        first_doc = await analyses_collection.find_one({"_id": first_id, "user_id": current_user["id"]})
+        second_doc = await analyses_collection.find_one({"_id": second_id, "user_id": current_user["id"]})
+        if first_doc is None or second_doc is None:
             raise HTTPException(status_code=404, detail="One or both analyses not found")
 
-        first = _serialize_analysis_row(first_row[0], transcript_text=first_row[1].text)
-        second = _serialize_analysis_row(second_row[0], transcript_text=second_row[1].text)
+        first = _serialize_analysis_doc(first_doc, include_text=True)
+        second = _serialize_analysis_doc(second_doc, include_text=True)
     elif request.transcript_1 and request.transcript_2:
         first = _run_analysis(request.transcript_1)
         if "error" in first:

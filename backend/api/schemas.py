@@ -24,5 +24,5 @@ class SaveAnalysisRequest(BaseModel):
 class CompareRequest(BaseModel):
     transcript_1: Optional[str] = None
     transcript_2: Optional[str] = None
-    analysis_id_1: Optional[int] = None
-    analysis_id_2: Optional[int] = None
+    analysis_id_1: Optional[str] = None
+    analysis_id_2: Optional[str] = None
