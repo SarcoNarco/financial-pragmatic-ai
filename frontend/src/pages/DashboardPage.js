@@ -106,7 +106,7 @@ export default function DashboardPage({ token, onLogout }) {
     setLoading(true);
     setError("");
     try {
-      const analysis = await uploadTranscript(file);
+      const analysis = await uploadTranscript(token, file);
       if (analysis?.error) {
         setError("Analysis failed. Try again.");
         setResult(null);

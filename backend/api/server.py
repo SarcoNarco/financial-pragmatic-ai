@@ -125,6 +125,19 @@ def _save_analysis_for_user(db: Session, user: User, transcript_text: str, analy
     return transcript, analysis_row
 
 
+def _analyze_and_save_for_user(db: Session, user: User, transcript_text: str):
+    analysis = _run_analysis(transcript_text)
+    if "error" in analysis:
+        return analysis
+
+    transcript, analysis_row = _save_analysis_for_user(db, user, transcript_text, analysis)
+    return {
+        "analysis": analysis,
+        "analysis_id": analysis_row.id,
+        "transcript_id": transcript.id,
+    }
+
+
 @app.post("/auth/signup", response_model=AuthResponse)
 def signup(payload: AuthRequest, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
@@ -172,16 +185,7 @@ def save_analysis(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    analysis = _run_analysis(request.transcript)
-    if "error" in analysis:
-        return analysis
-
-    transcript, analysis_row = _save_analysis_for_user(db, current_user, request.transcript, analysis)
-    return {
-        "analysis_id": analysis_row.id,
-        "transcript_id": transcript.id,
-        "analysis": analysis,
-    }
+    return _analyze_and_save_for_user(db, current_user, request.transcript)
 
 
 @app.get("/history")
@@ -236,7 +240,11 @@ def get_analysis(
 
 
 @app.post("/upload")
-async def upload_transcript(file: UploadFile = File(...)):
+async def upload_transcript(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     content = await file.read()
     filename = file.filename.lower()
 
@@ -266,7 +274,12 @@ async def upload_transcript(file: UploadFile = File(...)):
     text = text.replace("\n\n", "\n")
     text = text.strip()
 
-    return _run_analysis(text)
+    saved = _analyze_and_save_for_user(db, current_user, text)
+    if "error" in saved:
+        return saved
+
+    # Keep upload response aligned with /analyze payload.
+    return saved["analysis"]
 
 
 @app.post("/compare")

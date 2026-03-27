@@ -56,12 +56,15 @@ export async function compareAnalyses(token, analysisId1, analysisId2) {
   return response.data;
 }
 
-export async function uploadTranscript(file) {
+export async function uploadTranscript(token, file) {
   const formData = new FormData();
   formData.append("file", file);
 
   const response = await api.post("/upload", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: {
+      ...authHeader(token),
+      "Content-Type": "multipart/form-data",
+    },
   });
   return response.data;
 }
