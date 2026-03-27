@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class AuthRequest(BaseModel):
     email: str
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=6, max_length=256)
 
 
 class AuthResponse(BaseModel):
