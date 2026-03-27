@@ -9,7 +9,7 @@ from api.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
     get_current_user,
-    get_password_hash,
+    hash_password,
     verify_password,
 )
 from api.db import Base, engine, get_db
@@ -135,7 +135,7 @@ def signup(payload: AuthRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    user = User(email=email, password_hash=get_password_hash(payload.password))
+    user = User(email=email, password_hash=hash_password(payload.password))
     db.add(user)
     db.commit()
     db.refresh(user)

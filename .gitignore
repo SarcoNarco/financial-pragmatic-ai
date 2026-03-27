@@ -18,6 +18,7 @@ data/*.jsonl
 data/archive*
 
 *.log
+*.db
 
 financial_pragmatic_ai/models/*.pt
 financial_pragmatic_ai/models/*.bin
