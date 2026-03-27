@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, TypedDict
 
 import pandas as pd
 import torch
@@ -25,6 +25,13 @@ FINBERT_INTENT_PATH = PACKAGE_ROOT / "models" / "finbert_intent.pt"
 CONVERSATION_ATTENTION_PATH = PACKAGE_ROOT / "models" / "conversation_attention.pt"
 
 VALID_INTENTS = set(INTENT_LABELS)
+
+
+class ConversationSequence(TypedDict):
+    texts: List[str]
+    intents: List[str]
+    speakers: List[str]
+    signal: str
 
 
 def _clean_row(row: pd.Series) -> Dict[str, str] | None:
@@ -49,8 +56,8 @@ def _assign_signal(ceo_intent: str, cfo_intent: str, analyst_intent: str) -> str
     return "neutral"
 
 
-def build_conversation_sequences(df: pd.DataFrame):
-    sequences = []
+def build_conversation_sequences(df: pd.DataFrame) -> List[ConversationSequence]:
+    sequences: List[ConversationSequence] = []
 
     cleaned_rows = []
     for _, row in df.iterrows():
@@ -79,12 +86,14 @@ def build_conversation_sequences(df: pd.DataFrame):
 
         signal = _assign_signal(ceo_intent, cfo_intent, analyst_intent)
 
-        sequences.append({
-            "texts": texts,
-            "intents": intents,
-            "speakers": speakers,
-            "signal": signal,
-        })
+        sequences.append(
+            {
+                "texts": texts,
+                "intents": intents,
+                "speakers": speakers,
+                "signal": signal,
+            }
+        )
 
     return sequences
 
@@ -102,16 +111,16 @@ def _speaker_vector_3d(speaker: str) -> torch.Tensor:
 
 
 def build_embedding_sequences(
-    sequences: List[Dict[str, object]],
+    sequences: List[ConversationSequence],
     finbert_wrapper: FinBERTIntentModel,
 ) -> tuple[List[torch.Tensor], List[str]]:
     embedding_sequences: List[torch.Tensor] = []
     signal_labels: List[str] = []
 
     for sequence in sequences:
-        texts = sequence["texts"]  # type: ignore[assignment]
-        speakers = sequence["speakers"]  # type: ignore[assignment]
-        signal = str(sequence["signal"])
+        texts = sequence["texts"]
+        speakers = sequence["speakers"]
+        signal = sequence["signal"]
 
         if len(texts) != 3 or len(speakers) != 3:
             continue
