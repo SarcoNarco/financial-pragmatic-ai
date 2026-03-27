@@ -14,7 +14,14 @@ from api.auth import (
     hash_password,
     verify_password,
 )
-from api.database import analyses_collection, init_database, transcripts_collection, users_collection
+from api.database import (
+    analyses_collection,
+    init_database,
+    ping_database,
+    test_collection,
+    transcripts_collection,
+    users_collection,
+)
 from api.schemas import AuthRequest, AuthResponse, CompareRequest, SaveAnalysisRequest, TranscriptRequest
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
 from financial_pragmatic_ai.analysis.financial_signal_engine import (
@@ -45,7 +52,30 @@ analyzer = EarningsCallAnalyzer()
 
 @app.on_event("startup")
 async def startup_event():
-    await init_database()
+    try:
+        await ping_database()
+        print("MongoDB connection successful")
+        await init_database()
+    except Exception as exc:
+        print("MongoDB connection failed:", exc)
+        raise
+
+
+@app.get("/test-db")
+async def test_db():
+    try:
+        insert_result = await test_collection.insert_one({"status": "connected"})
+        doc = await test_collection.find_one({"_id": insert_result.inserted_id})
+        return {
+            "status": "success",
+            "inserted_id": str(insert_result.inserted_id),
+            "retrieved": doc is not None,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": str(exc),
+        }
 
 
 def _run_analysis(transcript: str):

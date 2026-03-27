@@ -1,17 +1,22 @@
 import os
 
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.server_api import ServerApi
 
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_URI = os.getenv("MONGO_URI")
+if not MONGO_URI:
+    raise RuntimeError("MONGO_URI is not set. Please configure the MongoDB connection string.")
+
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "financial_ai")
 
-client = AsyncIOMotorClient(MONGO_URI)
+client = AsyncIOMotorClient(MONGO_URI, server_api=ServerApi("1"))
 db = client[MONGO_DB_NAME]
 
 users_collection = db["users"]
 transcripts_collection = db["transcripts"]
 analyses_collection = db["analyses"]
+test_collection = db["test_connection"]
 
 
 async def init_database():
@@ -19,3 +24,7 @@ async def init_database():
     await analyses_collection.create_index("user_id")
     await analyses_collection.create_index("created_at")
     await transcripts_collection.create_index("user_id")
+
+
+async def ping_database():
+    await client.admin.command("ping")
