@@ -113,6 +113,8 @@ export default function DashboardPage({ token, onLogout }) {
         return;
       }
       setResult(analysis);
+      await refreshHistory();
+      setFile(null);
       setActiveTab("analyze");
     } catch (_err) {
       setError("Upload failed. Try again.");
