@@ -1,294 +1,504 @@
 # AGENT_HANDOFF.md
 
-## 1. Project Snapshot (Verified)
+## 1. PROJECT OVERVIEW (VERIFIED)
 
-This repository is a full-stack financial transcript analysis system with:
-- FastAPI backend (`backend/api/server.py`) as the active runtime API
-- React + Tailwind frontend (`frontend/src/*`)
-- Financial NLP/ML modules under `backend/financial_pragmatic_ai/*`
+This repository is a full-stack financial transcript analysis system.
 
-Current core product behavior:
-- User authentication (signup/login) with JWT
-- Transcript analysis from text and file upload (`.txt`, `.pdf`)
-- Saved analysis history per user
-- Comparison between two saved analyses or two ad-hoc transcripts
-- Visual dashboard (summary, timeline, heatmap, drivers)
+Primary runtime flow:
+- Frontend (React) sends transcript text/file to FastAPI backend.
+- Backend runs financial NLP inference over parsed speaker segments.
+- Backend returns analysis outputs (signal, score, prediction, confidence, volatility, drivers, segments).
+- Authenticated users can save analyses and compare prior runs.
+
+Current product-level capabilities:
+- JWT auth (signup/login)
+- transcript analysis via text and file upload (`.txt`, `.pdf`)
+- per-user analysis history (MongoDB)
+- comparison of two saved analyses (and API support for ad-hoc transcript comparison)
+- dashboard visualization (summary, timeline, heatmap, distributions, drivers, segments)
 
 ---
 
-## 2. Active Runtime Architecture
+## 2. VERIFIED PROJECT STRUCTURE
+
+```text
+NLP_Proj/
+├── AGENT_HANDOFF.md
+├── README.md
+├── requirements.txt
+├── .gitattributes
+├── .gitignore
+├── backend/
+│   ├── requirements.txt
+│   ├── api/
+│   │   ├── server.py                  # Active FastAPI app
+│   │   ├── auth.py
+│   │   ├── database.py
+│   │   └── schemas.py
+│   ├── financial_pragmatic_ai/
+│   │   ├── analysis/
+│   │   │   ├── transcript_parser.py
+│   │   │   ├── transcript_analyzer.py
+│   │   │   ├── earnings_call_analyzer.py
+│   │   │   ├── financial_signal_engine.py
+│   │   │   ├── market_predictor.py
+│   │   │   ├── insight_engine.py
+│   │   │   ├── timeline_signal_analyzer.py
+│   │   │   ├── timeline_builder.py
+│   │   │   ├── signal_statistics.py
+│   │   │   ├── financial_insight_generator.py
+│   │   │   └── conversation_vectorizer.py
+│   │   ├── models/
+│   │   │   ├── finbert_intent_model.py
+│   │   │   ├── financial_pragmatic_transformer_v2.py
+│   │   │   ├── conversation_attention_model.py
+│   │   │   ├── conversation_interaction_model.py
+│   │   │   ├── finbert_base.py
+│   │   │   ├── intent_classifier.py
+│   │   │   ├── speaker_embedding.py
+│   │   │   ├── pragmatic_input_layer.py
+│   │   │   ├── pragmatic_attention.py
+│   │   │   ├── financial_pragmatic_transformer.py
+│   │   │   ├── conversation_signal_model.pt
+│   │   │   ├── intent_classifier.pt
+│   │   │   └── pragmatic_transformer_trained.pt
+│   │   ├── data/
+│   │   │   ├── pragmatic_intent_dataset_clean.csv
+│   │   │   ├── pragmatic_intent_dataset.csv
+│   │   │   ├── conversation_signal_dataset.csv
+│   │   │   ├── intent_dataset.csv
+│   │   │   ├── build_pragmatic_training_dataset.py
+│   │   │   ├── build_conversation_dataset.py
+│   │   │   ├── clean_pragmatic_dataset.py
+│   │   │   └── pragmatic_training_dataset/combined_pragmatic_transcripts.jsonl
+│   │   ├── training/
+│   │   │   ├── train_v2_pipeline.py
+│   │   │   ├── train_pragmatic_transformer.py
+│   │   │   ├── train_pragmatic_transformwer.py  # compatibility wrapper
+│   │   │   ├── train_intent_classifier.py
+│   │   │   ├── train_conversation_model.py
+│   │   │   └── test_load_model.py
+│   │   ├── testing/
+│   │   │   ├── test_transcript_analyzer.py
+│   │   │   ├── test_earnings_call_analyzer.py
+│   │   │   ├── test_trained_model.py
+│   │   │   └── evaluate_model.py
+│   │   ├── evaluation/
+│   │   │   └── better_than_fin/
+│   │   │       ├── evaluate.py
+│   │   │       ├── metrics.py
+│   │   │       ├── utils.py
+│   │   │       ├── visualize.py
+│   │   │       └── results/            # committed smoke-run outputs
+│   │   ├── inference/
+│   │   │   ├── signal_extractor.py
+│   │   │   └── decision_engine.py
+│   │   ├── utils/
+│   │   │   ├── device.py
+│   │   │   ├── check_mps.py
+│   │   │   ├── transcript_parser.py
+│   │   │   ├── financial_event_tokenizer.py
+│   │   │   └── pragmatic_analyzer.py
+│   │   └── api/
+│   │       └── server.py               # legacy simplified API module
+│   └── financial_pragmatic_ai.db       # legacy sqlite artifact (not used)
+└── frontend/
+    ├── package.json
+    ├── tailwind.config.js
+    ├── postcss.config.js
+    ├── src/
+    │   ├── App.js
+    │   ├── index.js
+    │   ├── index.css
+    │   ├── App.css                     # present but not imported in index.js/App.js
+    │   ├── api/client.js
+    │   ├── pages/
+    │   │   ├── LoginPage.js
+    │   │   ├── SignupPage.js
+    │   │   └── DashboardPage.js
+    │   └── components/
+    │       ├── SummaryCard.js
+    │       ├── TimelineChart.js
+    │       └── SignalHeatmap.js
+    └── build/                          # committed build artifacts
+```
+
+---
+
+## 3. ACTIVE RUNTIME ARCHITECTURE
 
 ### Backend (active)
 - Entry point: `backend/api/server.py`
-- DB adapter: `backend/api/database.py`
-- Auth helpers: `backend/api/auth.py`
-- Request schemas: `backend/api/schemas.py`
+- Framework: FastAPI
+- Database: MongoDB via Motor (`backend/api/database.py`)
+- Auth: JWT + Passlib PBKDF2 (`backend/api/auth.py`)
 
-### Backend (legacy / not used by README run path)
-- `backend/financial_pragmatic_ai/api/server.py` exists but is a simplified older API.
-- README run command points to `uvicorn api.server:app --reload` (active server).
+### Backend (legacy, not primary runtime)
+- `backend/financial_pragmatic_ai/api/server.py` exists (older minimal API).
+- It is not the service started by README command.
 
 ### Frontend
-- App shell: `frontend/src/App.js`
-- Pages:
-  - `frontend/src/pages/LoginPage.js`
-  - `frontend/src/pages/SignupPage.js`
-  - `frontend/src/pages/DashboardPage.js`
-- API client: `frontend/src/api/client.js`
-
-No React Router is used; page/view switching is state-driven.
+- Framework: React (CRA) + Tailwind utility classes
+- Main app gate: `frontend/src/App.js`
+- No React Router; auth and page switching are local React state.
 
 ---
 
-## 3. Database & Auth (Current State)
+## 4. BACKEND API CONTRACT (EXACT CURRENT)
 
-## MongoDB (Motor)
-- `backend/api/database.py` uses Motor async client:
-  - `AsyncIOMotorClient(MONGO_URI, server_api=ServerApi("1"))`
-- Collections:
-  - `users_collection`
-  - `transcripts_collection`
-  - `analyses_collection`
-  - `test_collection`
+All routes are in `backend/api/server.py`.
 
-## Required env var
-- `MONGO_URI` is mandatory.
-- If missing, import-time `RuntimeError` is raised in `database.py`.
-
-## Startup behavior
-- On startup (`server.py`):
-  - `ping_database()`
-  - prints success/failure log
-  - initializes indexes via `init_database()`
-
-## Auth
-- Password hashing: `pbkdf2_sha256` via Passlib (`backend/api/auth.py`)
-- JWT:
-  - `HS256`
-  - `ACCESS_TOKEN_EXPIRE_MINUTES = 1440`
-  - token subject (`sub`) stores Mongo user `_id` string
-- `get_current_user` decodes token, converts `sub` to `ObjectId`, fetches Mongo user.
-
-## Security note
-- `SECRET_KEY` is hardcoded in `backend/api/auth.py`.
-
----
-
-## 4. API Endpoints (Exact Current Contract)
-
-All endpoints are in `backend/api/server.py`.
-
-### Public
+### Public routes
 - `POST /auth/signup`
+  - body: `{ "email": str, "password": str }`
+  - password validation from schema: min 6, max 256 chars
 - `POST /auth/login`
+  - body: `{ "email": str, "password": str }`
 - `POST /analyze`
+  - body: `{ "transcript": str }`
+  - returns analysis payload (does not persist)
 - `GET /test-db`
+  - writes one test doc and reads it back
 
-### Authenticated (Bearer token required)
+### Authenticated routes (Bearer token)
 - `POST /save-analysis`
+  - body: `{ "transcript": str }`
+  - runs analysis + persists transcript + analysis
+  - returns:
+    - `analysis` (full analysis payload)
+    - `analysis_id`
+    - `transcript_id`
 - `GET /history`
+  - returns last 100 saved analyses for user
 - `GET /analysis/{analysis_id}`
+  - returns saved analysis fields + transcript text
 - `POST /upload`
+  - multipart file upload (`.txt` or `.pdf`)
+  - extracts text, analyzes, persists (same save helper), returns analysis payload only
 - `POST /compare`
+  - mode A: compare by `analysis_id_1`, `analysis_id_2`
+  - mode B: compare by `transcript_1`, `transcript_2` (not persisted)
+  - returns deltas and trend
 
-### Notes on behavior
-- `/analyze`: returns analysis payload; does **not** persist.
-- `/save-analysis`: re-runs analysis and persists, returns:
-  - `analysis` (full analysis payload)
-  - `analysis_id` (Mongo ObjectId string)
-  - `transcript_id` (Mongo ObjectId string)
-- `/upload`: extracts text, runs same analyze+save helper, then returns only `analysis` payload.
-- `/history`: reads from `analyses_collection` for current user.
-- `/analysis/{id}`: returns saved doc fields + transcript text; does **not** include segments.
-- `/compare`:
-  - mode 1: compare saved analyses via `analysis_id_1`, `analysis_id_2`
-  - mode 2: compare ad-hoc `transcript_1`, `transcript_2` (not persisted)
-
----
-
-## 5. ML / Analysis Inference Pipeline
-
-Main orchestration:
-- `backend/financial_pragmatic_ai/analysis/earnings_call_analyzer.py`
-- `backend/financial_pragmatic_ai/analysis/transcript_analyzer.py`
-- `backend/financial_pragmatic_ai/analysis/financial_signal_engine.py`
-- `backend/financial_pragmatic_ai/analysis/market_predictor.py`
-- `backend/financial_pragmatic_ai/analysis/insight_engine.py`
-
-## Transcript parsing
-- `analysis/transcript_parser.py`
-  - Parses `NAME:` blocks
-  - Role inference: `CEO`, `CFO`, `ANALYST`, `EXECUTIVE`, `OPERATOR`
-  - Fallback chunking if no speaker blocks
-
-## Segment intent prediction
-- `TranscriptAnalyzer.predict_intent()`
-  - Primary: `FinBERTIntentModel` (`finbert_intent_model.py`)
-  - Fallback: `FinancialPragmaticTransformer` (`financial_pragmatic_transformer_v2.py`)
-  - Then applies heuristic overrides in `TranscriptAnalyzer.analyze()`
-  - Then applies weighted smoothing (`smooth_intents`)
-
-## Conversation signal
-- If `conversation_attention.pt` exists:
-  - uses `ConversationAttentionModel`
-- Else fallback:
-  - computes risk score from intents and derives signal via `financial_signal_engine`
-
-## Final API output
-`server.py` computes final score/signal/prediction/confidence/volatility/insight/drivers and returns them to frontend.
+### Current analysis payload fields
+- `score`
+- `signal`
+- `prediction`
+- `prediction_explanation`
+- `confidence`
+- `volatility`
+- `volatility_std`
+- `intent_distribution`
+- `insight`
+- `segments`
+- `drivers`
 
 ---
 
-## 6. Model Files & Artifact Status (Cross-checked)
+## 5. DATABASE + AUTH (VERIFIED)
 
-Directory checked: `backend/financial_pragmatic_ai/models`
+### Database
+- `backend/api/database.py`
+- Motor client with `ServerApi("1")`
+- `MONGO_URI` is required; startup/import fails if unset.
+- DB name default: `financial_ai` (override via `MONGO_DB_NAME`)
 
-### Present
+Collections:
+- `users`
+- `transcripts`
+- `analyses`
+- `test_connection`
+
+Indexes created on startup:
+- `users.email` unique
+- `analyses.user_id`
+- `analyses.created_at`
+- `transcripts.user_id`
+
+### Auth
+- JWT algorithm: `HS256`
+- access token expiry: 24h
+- password hashing: `pbkdf2_sha256` via Passlib
+- bearer auth dependency resolves Mongo user via `sub` ObjectId
+
+Security status:
+- `SECRET_KEY` is hardcoded in source (`backend/api/auth.py`), not env-driven.
+
+---
+
+## 6. INFERENCE PIPELINE (ACTUAL CODE PATH)
+
+### 6.1 Request path
+`backend/api/server.py::_run_analysis()`
+1. calls `EarningsCallAnalyzer.analyze(transcript)`
+2. consumes `result["segments"]` + aggregation signal
+3. computes score/signal/confidence/volatility/distribution/insight/prediction/drivers
+4. returns final payload
+
+### 6.2 Earnings-call orchestration
+`analysis/earnings_call_analyzer.py`
+1. `TranscriptAnalyzer.analyze()` -> segment intents
+2. `predict_conversation_signal(segments)` -> `model_signal`
+3. `TimelineSignalAnalyzer.analyze_timeline(segments)` -> window signals
+4. aggregate counts + use `model_signal` as dominant signal
+5. generate simple insight text from dominant signal
+
+### 6.3 Transcript parsing
+`analysis/transcript_parser.py`
+- Cleans text
+- Extracts `NAME:` blocks (supports title case and uppercase names)
+- infers roles: `CEO`, `CFO`, `ANALYST`, `OPERATOR`, else `EXECUTIVE`
+- fallback semantic chunking when no speaker blocks
+
+### 6.4 Intent prediction
+`analysis/transcript_analyzer.py`
+- Primary object: `FinBERTIntentModel`
+  - expected weights file: `models/finbert_intent.pt`
+- Fallback object: `FinancialPragmaticTransformer` loaded from `pragmatic_transformer_trained.pt`
+- Additional heuristic overrides for `GENERAL_UPDATE/EXECUTIVE` intents
+- Weighted smoothing (`smooth_intents`) over predicted intent sequence
+
+### 6.5 Conversation signal
+`TranscriptAnalyzer.predict_conversation_signal()`
+- If `conversation_attention.pt` is available and embedding lengths align:
+  - runs `ConversationAttentionModel`
+- Else:
+  - fallback rule path: `compute_risk_score` -> `derive_signal`
+
+Important behavior:
+- For full-sequence call (from `EarningsCallAnalyzer`), conversation model can be used (if weights file exists).
+- For timeline windows (size=3), embedding-length check usually fails when transcript has >3 segments, so those windows generally use fallback scoring.
+
+### 6.6 Scoring + prediction
+`analysis/financial_signal_engine.py`
+- score initialized at 45
+- +3 `COST_PRESSURE`
+- +1 `STRATEGIC_PROBING`
+- -1 `EXPANSION`
+- clipped to `[5, 95]`
+- signal thresholds:
+  - `>=65` risk
+  - `<=35` growth
+  - else neutral
+- confidence from dominant mapped signal share
+- volatility from signal std dev thresholds
+- intent distribution percentages
+
+`analysis/market_predictor.py`
+- maps signal/risk_score/volatility/intent_distribution to:
+  - `UP`, `DOWN`, `VOLATILE`, or `NEUTRAL`
+- returns prediction + explanation
+
+`analysis/insight_engine.py`
+- extracts top growth/risk driver snippets from segment intents + keyword filters
+
+---
+
+## 7. MODEL INVENTORY (VERIFIED FILE STATE)
+
+In `backend/financial_pragmatic_ai/models`:
+
+Present artifacts:
 - `pragmatic_transformer_trained.pt`
 - `intent_classifier.pt`
 - `conversation_signal_model.pt`
 
-### Missing
-- `finbert_intent.pt` (expected by `TranscriptAnalyzer`)
-- `conversation_attention.pt` (expected by `TranscriptAnalyzer`)
+Missing expected artifacts:
+- `finbert_intent.pt` (expected by `TranscriptAnalyzer` primary intent path)
+- `conversation_attention.pt` (expected by conversation attention path)
 
-### Important consequence
-`TranscriptAnalyzer` calls `self.intent_model.load_weights(FINBERT_INTENT_PATH)` but does not branch on `False` return.
-- If `finbert_intent.pt` is missing, the in-memory classifier head in `FinBERTIntentModel` remains whatever was initialized in code (not loaded from disk).
-- This is current runtime behavior.
-
----
-
-## 7. Training Pipelines (Current)
-
-### A) FinBERT intent training
-- File: `backend/financial_pragmatic_ai/models/finbert_intent_model.py`
-- Uses frozen `AutoModel("yiyanghkust/finbert-tone")` on CPU
-- Trains classifier head on CLS embeddings
-- Current implementation precomputes embeddings in memory (`X`, `y`) for one run
-
-### B) V2 unified pipeline
-- File: `backend/financial_pragmatic_ai/training/train_v2_pipeline.py`
-- Flow:
-  1. train finbert intent model (`train_finbert_intent_model`)
-  2. build conversation windows from pragmatic dataset
-  3. stream sequence embeddings to disk (`./embeddings/*.pt`)
-  4. train `ConversationAttentionModel` from lazy file dataset
-- Memory/throughput improvements implemented:
-  - disk streaming of embeddings
-  - `EmbeddingDataset` lazy loading
-  - classifier training loader with `num_workers=2`, `pin_memory` on CUDA
-  - max_length=64, batch_size=32 for embedding phase
-
-### C) Legacy conversation model
-- File: `backend/financial_pragmatic_ai/training/train_conversation_model.py`
-- Trains `ConversationInteractionModel` and writes `conversation_signal_model.pt`
-- This model is not wired into active API path in `backend/api/server.py`.
+Consequence:
+- Runtime logs warnings and enters fallback/hybrid behavior when these files are absent.
+- `FinBERTIntentModel.load_weights(...)` return value is not checked in `TranscriptAnalyzer`; object remains active even when weights file is missing.
 
 ---
 
-## 8. Frontend Behavior (Current)
+## 8. TRAINING PIPELINES (CURRENT)
 
-### Auth flow
-- Token stored in `localStorage` key: `financial_pragmatic_ai_token`
-- `App.js` shows login/signup if no token, dashboard if token exists
+### 8.1 `models/finbert_intent_model.py`
+- Defines `FinBERTIntentModel`
+- Frozen FinBERT encoder (`yiyanghkust/finbert-tone`) + trainable classifier head
+- training function: `train_finbert_intent_model(...)`
+- pre-tokenized `IntentTextDataset` (tokenization done in `__init__`)
+- precomputes CLS embeddings then trains classifier head
+- saves classifier state into `finbert_intent.pt` format (`{"classifier": ...}`)
 
-### Dashboard tabs
+### 8.2 `training/train_v2_pipeline.py`
+Unified pipeline:
+1. trains FinBERT intent head (`train_finbert_intent_model`)
+2. builds conversation sequences from pragmatic dataset (`CEO/CFO/ANALYST` presence in 3-row windows)
+3. streams 3-step speaker-aware embeddings to disk (`./embeddings/*.pt`)
+4. trains `ConversationAttentionModel` from lazy `EmbeddingDataset`
+5. writes `conversation_attention.pt`
+
+Notes:
+- sampling line present: `df = pd.read_csv(DATA_PATH).sample(10000, random_state=42)` for sequence building
+- FinBERT training still uses full `DATA_PATH` passed to trainer
+
+### 8.3 Other training scripts
+- `training/train_pragmatic_transformer.py` (supervised intent classifier training for v2 transformer)
+- `training/train_conversation_model.py` (legacy interaction model -> `conversation_signal_model.pt`)
+- `training/train_intent_classifier.py` (older `ExecutiveIntentClassifier` on `intent_dataset.csv`)
+- `training/train_pragmatic_transformwer.py` is a wrapper to the correctly spelled script
+
+---
+
+## 9. EVALUATION SUITE (BETTER-THAN-FIN)
+
+Location:
+- `backend/financial_pragmatic_ai/evaluation/better_than_fin/`
+
+Files:
+- `evaluate.py`
+- `metrics.py`
+- `utils.py`
+- `visualize.py`
+
+Command:
+- `python -m financial_pragmatic_ai.evaluation.better_than_fin.evaluate`
+
+Implemented outputs:
+- accuracy / precision / recall / F1 / confusion matrix (both systems)
+- agreement rate + disagreement logs
+- confidence by class
+- top-10 examples where custom system is correct and FinBERT is wrong
+- plots and csv/json artifacts under `results/`
+
+Current committed `results/` status:
+- artifacts exist from a smoke run with `dataset_rows = 2` (see `results/summary.json`)
+- this is a sanity run, not a full benchmark.
+
+---
+
+## 10. FRONTEND IMPLEMENTATION (VERIFIED)
+
+### Stack
+- React + Axios + Tailwind utility classes
+- charts: `react-chartjs-2`/`chart.js` and `recharts` dependency present
+
+### App shell
+- `App.js`
+  - token gate via localStorage key: `financial_pragmatic_ai_token`
+  - unauthenticated views: login/signup
+  - authenticated view: dashboard
+
+### Dashboard tabs (actual)
 - `Analyze`
 - `History`
 - `Compare`
 
-### Analyze tab
-- Text area + `Analyze & Save`
+### Analyze tab behavior
+- Text flow:
   - calls `/analyze`
   - then `/save-analysis`
-  - then refreshes history
-- File upload + `Upload & Analyze`
+  - refreshes history
+- File upload flow:
   - calls `/upload` with bearer token
-  - backend saves internally
-  - frontend refreshes history
+  - backend already persists
+  - refreshes history
 
-### History tab
-- Reads `/history`
-- Clicking an item calls `/analysis/{id}` then calls `/analyze` on transcript text to regenerate segments for chart views.
+### History tab behavior
+- loads `/history`
+- selecting an item:
+  - fetches `/analysis/{id}`
+  - then calls `/analyze` on transcript text to regenerate segments/charts
+  - overlays saved summary fields from `/analysis/{id}`
 
-### Compare tab
-- Select 2 saved analysis IDs
+### Compare tab behavior
+- UI compares two saved analysis IDs only
 - calls `/compare` with `analysis_id_1`, `analysis_id_2`
 
----
-
-## 9. Exact Known Limitations / Risks
-
-1. `MONGO_URI` hard requirement
-- Server crashes at import/startup if unset.
-
-2. Hardcoded JWT secret
-- `SECRET_KEY` is in source code (`api/auth.py`).
-
-3. Inference artifact gap
-- Missing `finbert_intent.pt` and `conversation_attention.pt` means hybrid/fallback behavior.
-
-4. Potential intent model quality issue
-- Because `load_weights()` return value is not checked, missing intent weights do not disable primary model object.
-
-5. `/test-db` side effect
-- Every call inserts a doc in `test_connection` collection (no cleanup).
-
-6. Duplicate API module still present
-- `backend/financial_pragmatic_ai/api/server.py` exists and can confuse maintainers; active API is `backend/api/server.py`.
-
-7. Docs drift
-- Root `README.md` response example is older/simplified and does not fully match current response payloads.
+### Styling status
+- Tailwind utility styling is active (`index.css` includes Tailwind directives)
+- `App.css` exists but is not imported by `index.js`/`App.js` (currently unused stylesheet)
 
 ---
 
-## 10. Verification Performed For This Handoff Update
+## 11. KNOWN LIMITATIONS / ARCHITECTURAL INCONSISTENCIES
 
-The following checks were run successfully before finalizing this file:
+1. Missing V2 weight artifacts
+- `finbert_intent.pt` and `conversation_attention.pt` are missing from repo currently.
 
-- Python compile checks:
-  - `backend/api/server.py`
-  - `backend/api/auth.py`
-  - `backend/api/database.py`
-  - `backend/api/schemas.py`
-  - `backend/financial_pragmatic_ai/analysis/*.py`
-  - `backend/financial_pragmatic_ai/models/*.py`
-  - `backend/financial_pragmatic_ai/training/train_v2_pipeline.py`
+2. Timeline signal windows and conversation model
+- Windowed calls in timeline analyzer usually fallback to rule scoring due embedding-length guard in `predict_conversation_signal`.
 
-- Frontend production build:
-  - `cd frontend && npm run build` (compiled successfully)
+3. Hardcoded JWT secret
+- security risk for production.
 
-No assumptions in this handoff were made beyond the current repository state and these checks.
+4. `MONGO_URI` hard requirement at import time
+- backend fails early if unset.
+
+5. Legacy API + legacy sqlite artifact still present
+- `backend/financial_pragmatic_ai/api/server.py`
+- `backend/financial_pragmatic_ai.db`
+
+6. `/test-db` has write side effect
+- each call inserts into `test_connection`.
+
+7. README response example is outdated
+- README shows simplified `/analyze` response (signal/insight only), but actual API returns richer payload.
+
+8. Evaluation dependency drift
+- `backend/requirements.txt` does not include `pandas`, `matplotlib`, `scikit-learn` required by evaluation scripts.
+
+9. Repository hygiene
+- `frontend/build/` and `frontend/node_modules/` are present in working tree (large, generally not source-of-truth for dev flow).
 
 ---
 
-## 11. Run Instructions (Current)
+## 12. HOW TO RUN (CURRENT PRACTICAL STEPS)
 
-## Backend
+### Backend
 ```bash
-cd backend
+cd /Users/saroshnadaf/Documents/NLP_Proj/backend
+export MONGO_URI="<your_mongo_uri>"
 pip install -r requirements.txt
-export MONGO_URI="<your_mongodb_uri>"
 uvicorn api.server:app --reload
 ```
 
-## Frontend
+### Frontend
 ```bash
-cd frontend
+cd /Users/saroshnadaf/Documents/NLP_Proj/frontend
 npm install
 npm start
 ```
 
-## Quick DB test
-Open in browser:
-- `http://127.0.0.1:8000/test-db`
-
-Expected response shape:
-```json
-{
-  "status": "success",
-  "inserted_id": "...",
-  "retrieved": true
-}
+### Evaluation
+```bash
+cd /Users/saroshnadaf/Documents/NLP_Proj/backend
+python -m financial_pragmatic_ai.evaluation.better_than_fin.evaluate
 ```
+
+---
+
+## 13. PRIORITIZED NEXT STEPS
+
+1. Train and persist missing V2 artifacts:
+- `finbert_intent.pt`
+- `conversation_attention.pt`
+
+2. Make `TranscriptAnalyzer` robust to missing intent weights:
+- explicitly branch when `load_weights()` is false.
+
+3. Align timeline analyzer with conversation model embeddings:
+- support per-window embedding extraction so attention model can score each window.
+
+4. Move JWT secret to environment variable and rotate.
+
+5. Update `backend/requirements.txt` with evaluation dependencies.
+
+6. Clean repo hygiene:
+- exclude/remove `frontend/node_modules` and generated build artifacts from tracked source branch if desired.
+
+---
+
+## 14. VERIFICATION SCOPE FOR THIS UPDATE
+
+This handoff update was generated by direct source inspection of:
+- backend API/auth/database/schemas
+- analysis/model/training/testing/evaluation modules
+- frontend app/pages/components/client
+- repo artifact inventory and model/data file presence
+
+No assumptions were made about unimplemented components.
+If a component was ambiguous, it is explicitly called out above as legacy, missing, or fallback behavior.
