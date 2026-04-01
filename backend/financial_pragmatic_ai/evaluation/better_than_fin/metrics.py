@@ -15,12 +15,26 @@ from sklearn.metrics import (
 
 def compute_metrics(y_true: List[str], y_pred: List[str], labels: List[str]) -> Dict:
     accuracy = float(accuracy_score(y_true, y_pred))
+
     precision, recall, f1, support = precision_recall_fscore_support(
         y_true,
         y_pred,
         labels=labels,
         zero_division=0,
     )
+    macro_precision = float(
+        precision_recall_fscore_support(
+            y_true, y_pred, average="macro", zero_division=0
+        )[0]
+    )
+    macro_recall = float(
+        precision_recall_fscore_support(
+            y_true, y_pred, average="macro", zero_division=0
+        )[1]
+    )
+    macro_f1 = float(f1_score(y_true, y_pred, average="macro", zero_division=0))
+    weighted_f1 = float(f1_score(y_true, y_pred, average="weighted", zero_division=0))
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
 
     per_class = {}
     for i, label in enumerate(labels):
@@ -31,12 +45,10 @@ def compute_metrics(y_true: List[str], y_pred: List[str], labels: List[str]) -> 
             "support": int(support[i]),
         }
 
-    macro_f1 = float(f1_score(y_true, y_pred, average="macro", zero_division=0))
-    weighted_f1 = float(f1_score(y_true, y_pred, average="weighted", zero_division=0))
-    cm = confusion_matrix(y_true, y_pred, labels=labels)
-
     return {
         "accuracy": accuracy,
+        "macro_precision": macro_precision,
+        "macro_recall": macro_recall,
         "macro_f1": macro_f1,
         "weighted_f1": weighted_f1,
         "per_class": per_class,
@@ -48,7 +60,8 @@ def delta_metrics(baseline: Dict, ours: Dict) -> Dict[str, float]:
     return {
         "accuracy_delta": float(ours["accuracy"] - baseline["accuracy"]),
         "macro_f1_delta": float(ours["macro_f1"] - baseline["macro_f1"]),
-        "weighted_f1_delta": float(ours["weighted_f1"] - baseline["weighted_f1"]),
+        "macro_precision_delta": float(ours["macro_precision"] - baseline["macro_precision"]),
+        "macro_recall_delta": float(ours["macro_recall"] - baseline["macro_recall"]),
     }
 
 

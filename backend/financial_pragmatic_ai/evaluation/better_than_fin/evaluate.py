@@ -1,4 +1,4 @@
-"""Run full evaluation: FinBERT baseline vs custom financial NLP pipeline."""
+"""Run full evaluation: FinBERT baseline vs custom financial NLP system."""
 
 from __future__ import annotations
 
@@ -7,10 +7,11 @@ import io
 import json
 from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import pandas as pd
 import torch
+from sklearn.metrics import classification_report
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from financial_pragmatic_ai.analysis.financial_signal_engine import (
@@ -33,7 +34,9 @@ from financial_pragmatic_ai.evaluation.better_than_fin.utils import (
     agreement_rate,
     average_confidence_per_class,
     baseline_sentiment_to_signal,
+    build_balanced_signal_sample,
     build_ground_truth_signals,
+    clear_results_dir,
     ensure_results_dir,
     explain_our_decision,
     load_evaluation_dataset,
@@ -41,10 +44,11 @@ from financial_pragmatic_ai.evaluation.better_than_fin.utils import (
     snippet,
 )
 from financial_pragmatic_ai.evaluation.better_than_fin.visualize import (
-    save_agreement_pie,
-    save_class_distribution,
-    save_confusion_matrices,
-    save_performance_bars,
+    save_agreement_bar_chart,
+    save_class_distribution_chart,
+    save_model_comparison_chart,
+    save_normalized_confusion_matrix,
+    save_per_class_f1_chart,
 )
 
 
@@ -56,7 +60,6 @@ def _normalize_finbert_label(raw_label: str, pred_idx: int) -> str:
         return "negative"
     if "neutral" in label:
         return "neutral"
-
     fallback = {0: "positive", 1: "negative", 2: "neutral"}
     return fallback.get(pred_idx, "neutral")
 
@@ -86,12 +89,12 @@ def run_finbert_baseline(
                 max_length=max_length,
                 return_tensors="pt",
             )
-            encoded = {k: v.to(device) for k, v in encoded.items()}
+            encoded = {key: value.to(device) for key, value in encoded.items()}
             logits = model(**encoded).logits
             probs = torch.softmax(logits, dim=-1)
             pred_ids = torch.argmax(probs, dim=-1)
-
             id2label = getattr(model.config, "id2label", {}) or {}
+
             for row, pred_id_tensor in enumerate(pred_ids):
                 pred_id = int(pred_id_tensor.item())
                 raw_label = id2label.get(pred_id, str(pred_id))
@@ -103,17 +106,14 @@ def run_finbert_baseline(
                 signals.append(signal)
                 confidences.append(confidence)
 
-            if (start // batch_size + 1) % 50 == 0:
+            step = start // batch_size + 1
+            if step % 20 == 0:
                 print(
-                    f"[FinBERT baseline] Processed "
-                    f"{min(start + len(batch_texts), len(texts))}/{len(texts)} samples"
+                    f"[FinBERT baseline] processed "
+                    f"{min(start + len(batch_texts), len(texts))}/{len(texts)}"
                 )
 
-    return {
-        "sentiments": sentiments,
-        "signals": signals,
-        "confidences": confidences,
-    }
+    return {"sentiments": sentiments, "signals": signals, "confidences": confidences}
 
 
 def _safe_analyze(transcript_analyzer: TranscriptAnalyzer, text: str) -> List[dict]:
@@ -126,14 +126,10 @@ def run_custom_system(texts: List[str]) -> List[Dict]:
     analyzer = TranscriptAnalyzer()
     outputs: List[Dict] = []
 
-    for idx, text in enumerate(texts, start=1):
+    for index, text in enumerate(texts, start=1):
         segments = _safe_analyze(analyzer, text)
         if not segments:
-            segments = [{
-                "speaker": "EXECUTIVE",
-                "text": text,
-                "intent": "GENERAL_UPDATE",
-            }]
+            segments = [{"speaker": "EXECUTIVE", "text": text, "intent": "GENERAL_UPDATE"}]
 
         score = compute_risk_score(segments)
         signal = derive_signal(score)
@@ -148,70 +144,105 @@ def run_custom_system(texts: List[str]) -> List[Dict]:
         )
         drivers = extract_key_drivers(segments)
 
-        outputs.append({
-            "segments": segments,
-            "signal": signal,
-            "prediction": prediction["prediction"],
-            "prediction_explanation": prediction["explanation"],
-            "confidence": normalize_confidence_to_percent(confidence),
-            "volatility": volatility,
-            "score": score,
-            "drivers": drivers,
-        })
+        outputs.append(
+            {
+                "segments": segments,
+                "signal": signal,
+                "prediction": prediction["prediction"],
+                "prediction_explanation": prediction["explanation"],
+                "confidence": normalize_confidence_to_percent(confidence),
+                "volatility": volatility,
+                "score": score,
+                "drivers": drivers,
+            }
+        )
 
-        if idx % 50 == 0:
-            print(f"[Our system] Processed {idx}/{len(texts)} samples")
+        if index % 20 == 0:
+            print(f"[Our system] processed {index}/{len(texts)}")
 
     return outputs
 
 
-def _build_disagreement_rows(
-    df: pd.DataFrame,
+def _build_case_rows(
+    sampled_df: pd.DataFrame,
     y_true: List[str],
     baseline: Dict[str, List],
     ours: List[Dict],
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    all_rows = []
-    disagreement_rows = []
+) -> pd.DataFrame:
+    rows = []
 
-    for i in range(len(df)):
-        text = str(df.iloc[i]["text"])
-        row = {
-            "index": i,
-            "text": text,
-            "text_snippet": snippet(text),
-            "ground_truth_signal": y_true[i],
-            "finbert_signal": baseline["signals"][i],
-            "finbert_sentiment": baseline["sentiments"][i],
-            "finbert_confidence": baseline["confidences"][i],
-            "our_signal": ours[i]["signal"],
-            "our_prediction": ours[i]["prediction"],
-            "our_confidence": ours[i]["confidence"],
-            "our_volatility": ours[i]["volatility"],
-            "our_score": ours[i]["score"],
-            "our_explanation": explain_our_decision(ours[i]["segments"], ours[i]["signal"]),
-        }
-        all_rows.append(row)
-        if row["finbert_signal"] != row["our_signal"]:
-            disagreement_rows.append(row)
+    for idx in range(len(sampled_df)):
+        true_signal = y_true[idx]
+        finbert_signal = baseline["signals"][idx]
+        our_signal = ours[idx]["signal"]
 
-    all_df = pd.DataFrame(all_rows)
-    disagreement_df = pd.DataFrame(disagreement_rows)
-    return all_df, disagreement_df
+        case_type = "agreement"
+        if finbert_signal != our_signal:
+            if our_signal == true_signal and finbert_signal != true_signal:
+                case_type = "ours_correct_finbert_wrong"
+            elif finbert_signal == true_signal and our_signal != true_signal:
+                case_type = "finbert_correct_ours_wrong"
+            else:
+                case_type = "disagreement_other"
+
+        text = str(sampled_df.iloc[idx]["text"])
+        rows.append(
+            {
+                "index": idx,
+                "text": text,
+                "text_snippet": snippet(text),
+                "ground_truth_signal": true_signal,
+                "finbert_signal": finbert_signal,
+                "our_signal": our_signal,
+                "finbert_sentiment": baseline["sentiments"][idx],
+                "finbert_confidence": baseline["confidences"][idx],
+                "our_confidence": ours[idx]["confidence"],
+                "our_prediction": ours[idx]["prediction"],
+                "our_volatility": ours[idx]["volatility"],
+                "our_score": ours[idx]["score"],
+                "our_explanation": explain_our_decision(ours[idx]["segments"], our_signal),
+                "case_type": case_type,
+            }
+        )
+
+    return pd.DataFrame(rows)
 
 
 def run_evaluation(
     dataset_path: str | Path | None = None,
-    max_samples: int | None = None,
+    per_class_target: int = 80,
     results_dir: str | Path | None = None,
     batch_size: int = 32,
 ) -> Dict:
     results_path = ensure_results_dir(results_dir)
-    df = load_evaluation_dataset(dataset_path=dataset_path, max_samples=max_samples)
-    texts = df["text"].tolist()
-    y_true = build_ground_truth_signals(df["intent"].tolist())
+    clear_results_dir(results_path)
 
-    print(f"Loaded dataset rows: {len(df)}")
+    full_df = load_evaluation_dataset(dataset_path=dataset_path)
+    full_df["ground_truth_signal"] = build_ground_truth_signals(full_df["intent"].tolist())
+    full_counts = {
+        label: int((full_df["ground_truth_signal"] == label).sum()) for label in SIGNAL_LABELS
+    }
+
+    sampled_df = build_balanced_signal_sample(
+        full_df,
+        per_class_target=per_class_target,
+        random_state=42,
+    )
+    if sampled_df.empty:
+        raise ValueError("Balanced sampling produced an empty dataset.")
+
+    sampled_counts = {
+        label: int((sampled_df["ground_truth_signal"] == label).sum()) for label in SIGNAL_LABELS
+    }
+
+    texts = sampled_df["text"].tolist()
+    y_true = sampled_df["ground_truth_signal"].tolist()
+
+    print(f"Full dataset size: {len(full_df)}")
+    print(f"Full per-class counts: {full_counts}")
+    print(f"Balanced sample size: {len(sampled_df)}")
+    print(f"Balanced per-class counts: {sampled_counts}")
+
     print("Running FinBERT baseline...")
     baseline = run_finbert_baseline(texts=texts, batch_size=batch_size)
 
@@ -226,84 +257,141 @@ def run_evaluation(
     our_metrics = compute_metrics(y_true=y_true, y_pred=y_pred_ours, labels=SIGNAL_LABELS)
     deltas = delta_metrics(finbert_metrics, our_metrics)
 
-    agree = agreement_rate(y_pred_finbert, y_pred_ours)
+    agree_rate = agreement_rate(y_pred_finbert, y_pred_ours)
+    agreement_count = int(round(agree_rate * len(y_true)))
+    disagreement_count = int(len(y_true) - agreement_count)
+
     confidence_comparison = {
         "finbert": average_confidence_per_class(
-            y_pred_finbert,
-            baseline["confidences"],
-            labels=SIGNAL_LABELS,
+            y_pred_finbert, baseline["confidences"], labels=SIGNAL_LABELS
         ),
         "our_system": average_confidence_per_class(
-            y_pred_ours,
-            confidence_ours,
-            labels=SIGNAL_LABELS,
+            y_pred_ours, confidence_ours, labels=SIGNAL_LABELS
         ),
     }
 
-    all_df, disagreement_df = _build_disagreement_rows(
-        df=df,
+    cases_df = _build_case_rows(
+        sampled_df=sampled_df,
         y_true=y_true,
         baseline=baseline,
         ours=ours,
     )
-
-    top10_ours_correct = all_df[
-        (all_df["our_signal"] == all_df["ground_truth_signal"])
-        & (all_df["finbert_signal"] != all_df["ground_truth_signal"])
+    disagreement_df = cases_df[cases_df["finbert_signal"] != cases_df["our_signal"]].copy()
+    ours_correct_df = cases_df[
+        (cases_df["our_signal"] == cases_df["ground_truth_signal"])
+        & (cases_df["finbert_signal"] != cases_df["ground_truth_signal"])
     ].copy()
-    top10_ours_correct = top10_ours_correct.sort_values(
-        by="our_confidence",
-        ascending=False,
-    ).head(10)
+    finbert_correct_df = cases_df[
+        (cases_df["finbert_signal"] == cases_df["ground_truth_signal"])
+        & (cases_df["our_signal"] != cases_df["ground_truth_signal"])
+    ].copy()
 
-    all_df.to_csv(results_path / "predictions.csv", index=False)
-    disagreement_df.to_csv(results_path / "disagreements.csv", index=False)
-    top10_ours_correct.to_csv(
-        results_path / "top10_ours_correct_finbert_wrong.csv",
-        index=False,
-    )
+    summary = {
+        "dataset": {
+            "full_size": int(len(full_df)),
+            "sample_size": int(len(sampled_df)),
+            "full_class_counts": full_counts,
+            "sample_class_counts": sampled_counts,
+            "per_class_target": int(per_class_target),
+            "sampling_random_state": 42,
+        },
+        "finbert": finbert_metrics,
+        "our_system": our_metrics,
+        "improvement": deltas,
+        "comparison": {
+            "agreement_rate": round(float(agree_rate), 6),
+            "agreement_count": agreement_count,
+            "disagreement_count": int(len(disagreement_df)),
+            "ours_correct_finbert_wrong_count": int(len(ours_correct_df)),
+            "finbert_correct_ours_wrong_count": int(len(finbert_correct_df)),
+        },
+        "confidence_comparison": confidence_comparison,
+        "results_dir": str(results_path.resolve()),
+    }
 
-    finbert_cm = to_numpy_confusion(finbert_metrics)
-    our_cm = to_numpy_confusion(our_metrics)
-    save_confusion_matrices(
+    with open(results_path / "metrics_summary.json", "w", encoding="utf-8") as file:
+        json.dump(summary, file, indent=2)
+
+    report_lines = [
+        "=== DATASET ===",
+        f"Full dataset size: {len(full_df)}",
+        f"Balanced sample size: {len(sampled_df)}",
+        f"Full per-class counts: {full_counts}",
+        f"Balanced per-class counts: {sampled_counts}",
+        "",
+        "=== FINBERT CLASSIFICATION REPORT ===",
+        classification_report(
+            y_true,
+            y_pred_finbert,
+            labels=SIGNAL_LABELS,
+            target_names=SIGNAL_LABELS,
+            digits=4,
+            zero_division=0,
+        ),
+        "",
+        "=== OUR SYSTEM CLASSIFICATION REPORT ===",
+        classification_report(
+            y_true,
+            y_pred_ours,
+            labels=SIGNAL_LABELS,
+            target_names=SIGNAL_LABELS,
+            digits=4,
+            zero_division=0,
+        ),
+        "",
+        "=== AGREEMENT ANALYSIS ===",
+        f"Agreement rate: {agree_rate:.4f}",
+        f"Disagreement count: {len(disagreement_df)}",
+        f"Ours correct, FinBERT wrong: {len(ours_correct_df)}",
+        f"FinBERT correct, Ours wrong: {len(finbert_correct_df)}",
+    ]
+    report_text = "\n".join(report_lines)
+    with open(results_path / "classification_report.txt", "w", encoding="utf-8") as file:
+        file.write(report_text)
+
+    disagreement_df.to_csv(results_path / "disagreement_cases.csv", index=False)
+    ours_correct_df.to_csv(results_path / "ours_correct_finbert_wrong.csv", index=False)
+
+    save_normalized_confusion_matrix(
         labels=SIGNAL_LABELS,
-        finbert_cm=finbert_cm,
-        our_cm=our_cm,
-        output_path=results_path / "confusion_matrices.png",
+        confusion_matrix=to_numpy_confusion(our_metrics),
+        title="Our System - Normalized Confusion Matrix",
+        output_path=results_path / "confusion_matrix_ours_normalized.png",
     )
-    save_performance_bars(
+    save_normalized_confusion_matrix(
+        labels=SIGNAL_LABELS,
+        confusion_matrix=to_numpy_confusion(finbert_metrics),
+        title="FinBERT - Normalized Confusion Matrix",
+        output_path=results_path / "confusion_matrix_finbert_normalized.png",
+    )
+    save_model_comparison_chart(
         finbert_metrics=finbert_metrics,
         our_metrics=our_metrics,
-        output_path=results_path / "accuracy_f1_comparison.png",
+        output_path=results_path / "model_comparison.png",
     )
-    save_class_distribution(
+    save_per_class_f1_chart(
+        labels=SIGNAL_LABELS,
+        finbert_metrics=finbert_metrics,
+        our_metrics=our_metrics,
+        output_path=results_path / "per_class_f1.png",
+    )
+    save_agreement_bar_chart(
+        agreement_count=agreement_count,
+        disagreement_count=disagreement_count,
+        output_path=results_path / "agreement_bar.png",
+    )
+    save_class_distribution_chart(
         labels=SIGNAL_LABELS,
         y_true=y_true,
         y_finbert=y_pred_finbert,
         y_ours=y_pred_ours,
         output_path=results_path / "class_distribution.png",
     )
-    save_agreement_pie(
-        agreement_rate_value=agree,
-        output_path=results_path / "agreement_pie.png",
-    )
-
-    output = {
-        "dataset_rows": len(df),
-        "finbert": finbert_metrics,
-        "our_system": our_metrics,
-        "improvement": deltas,
-        "agreement_rate": round(agree, 6),
-        "confidence_comparison": confidence_comparison,
-        "disagreement_count": int(len(disagreement_df)),
-        "top10_ours_correct_finbert_wrong_count": int(len(top10_ours_correct)),
-        "results_dir": str(results_path),
-    }
-
-    with open(results_path / "summary.json", "w", encoding="utf-8") as file:
-        json.dump(output, file, indent=2)
 
     print("\n=== MODEL COMPARISON ===\n")
+    print(f"Sample size: {len(sampled_df)}")
+    print(f"Per-class counts: {sampled_counts}")
+    print("")
     print("FinBERT:")
     print(f"- Accuracy: {finbert_metrics['accuracy']:.4f}")
     print(f"- F1: {finbert_metrics['macro_f1']:.4f}")
@@ -316,44 +404,44 @@ def run_evaluation(
     print(f"- Δ Accuracy: {deltas['accuracy_delta']:.4f}")
     print(f"- Δ F1: {deltas['macro_f1_delta']:.4f}")
 
-    return output
+    return summary
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Evaluate custom system vs FinBERT baseline.")
+    parser = argparse.ArgumentParser(description="Evaluate custom pipeline vs FinBERT baseline.")
     parser.add_argument(
         "--dataset-path",
         type=str,
         default=None,
-        help="Path to pragmatic_intent_dataset_clean.csv (optional).",
+        help="Optional path to dataset CSV.",
     )
     parser.add_argument(
-        "--max-samples",
+        "--per-class-target",
         type=int,
-        default=None,
-        help="Limit evaluation size for faster runs.",
+        default=80,
+        help="Target samples per signal class for balanced evaluation.",
     )
     parser.add_argument(
         "--results-dir",
         type=str,
         default=None,
-        help="Directory where outputs (plots/csv/json) are saved.",
+        help="Optional output directory for evaluation artifacts.",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
         default=32,
-        help="Baseline FinBERT inference batch size.",
+        help="FinBERT baseline inference batch size.",
     )
     return parser
 
 
-def main():
+def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
     run_evaluation(
         dataset_path=args.dataset_path,
-        max_samples=args.max_samples,
+        per_class_target=args.per_class_target,
         results_dir=args.results_dir,
         batch_size=args.batch_size,
     )

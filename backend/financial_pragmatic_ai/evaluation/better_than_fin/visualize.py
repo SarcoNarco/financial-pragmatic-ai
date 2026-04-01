@@ -1,4 +1,4 @@
-"""Visualization helpers for better-than-FinBERT evaluation."""
+"""Visualization helpers for better-than-FinBERT reporting."""
 
 from __future__ import annotations
 
@@ -13,8 +13,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def _heatmap(ax, matrix: np.ndarray, labels: List[str], title: str):
-    image = ax.imshow(matrix, cmap="Blues")
+def _normalize_confusion_matrix(cm: np.ndarray) -> np.ndarray:
+    cm = cm.astype(np.float64)
+    row_sums = cm.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1.0
+    return cm / row_sums
+
+
+def save_normalized_confusion_matrix(
+    labels: List[str],
+    confusion_matrix: np.ndarray,
+    title: str,
+    output_path: Path,
+) -> None:
+    normalized = _normalize_confusion_matrix(confusion_matrix)
+
+    fig, ax = plt.subplots(figsize=(6.5, 5.5))
+    image = ax.imshow(normalized, cmap="Blues", vmin=0.0, vmax=1.0)
     ax.set_title(title)
     ax.set_xlabel("Predicted")
     ax.set_ylabel("Actual")
@@ -23,105 +38,119 @@ def _heatmap(ax, matrix: np.ndarray, labels: List[str], title: str):
     ax.set_xticklabels(labels)
     ax.set_yticklabels(labels)
 
-    for row in range(matrix.shape[0]):
-        for col in range(matrix.shape[1]):
-            ax.text(col, row, str(int(matrix[row, col])), ha="center", va="center")
+    for row in range(normalized.shape[0]):
+        for col in range(normalized.shape[1]):
+            pct = normalized[row, col] * 100.0
+            ax.text(col, row, f"{pct:.1f}%", ha="center", va="center", fontsize=9)
 
-    plt.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
-
-
-def save_confusion_matrices(
-    labels: List[str],
-    finbert_cm: np.ndarray,
-    our_cm: np.ndarray,
-    output_path: Path,
-):
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-    _heatmap(axes[0], finbert_cm, labels, "FinBERT Baseline Confusion Matrix")
-    _heatmap(axes[1], our_cm, labels, "Our System Confusion Matrix")
+    colorbar = plt.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+    colorbar.set_label("Percentage")
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=220)
     plt.close(fig)
 
 
-def save_performance_bars(
+def save_model_comparison_chart(
     finbert_metrics: Dict,
     our_metrics: Dict,
     output_path: Path,
-):
-    names = ["Accuracy", "Macro F1", "Weighted F1"]
-    fin_values = [
-        finbert_metrics["accuracy"],
-        finbert_metrics["macro_f1"],
-        finbert_metrics["weighted_f1"],
-    ]
-    our_values = [
-        our_metrics["accuracy"],
-        our_metrics["macro_f1"],
-        our_metrics["weighted_f1"],
-    ]
+) -> None:
+    metrics = ["Accuracy", "Macro F1"]
+    fin_values = [finbert_metrics["accuracy"], finbert_metrics["macro_f1"]]
+    our_values = [our_metrics["accuracy"], our_metrics["macro_f1"]]
 
-    x = np.arange(len(names))
+    x = np.arange(len(metrics))
     width = 0.35
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.bar(x - width / 2, fin_values, width, label="FinBERT")
-    ax.bar(x + width / 2, our_values, width, label="Our System")
+    fig, ax = plt.subplots(figsize=(7.5, 5))
+    ax.bar(x - width / 2, fin_values, width, label="FinBERT", color="#6b7280")
+    ax.bar(x + width / 2, our_values, width, label="Our System", color="#2563eb")
     ax.set_ylim(0.0, 1.0)
     ax.set_ylabel("Score")
-    ax.set_title("Metric Comparison")
+    ax.set_title("Model Comparison")
     ax.set_xticks(x)
-    ax.set_xticklabels(names)
+    ax.set_xticklabels(metrics)
     ax.legend()
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=220)
     plt.close(fig)
 
 
-def save_class_distribution(
+def save_per_class_f1_chart(
+    labels: List[str],
+    finbert_metrics: Dict,
+    our_metrics: Dict,
+    output_path: Path,
+) -> None:
+    fin_values = [finbert_metrics["per_class"][label]["f1"] for label in labels]
+    our_values = [our_metrics["per_class"][label]["f1"] for label in labels]
+
+    x = np.arange(len(labels))
+    width = 0.35
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(x - width / 2, fin_values, width, label="FinBERT", color="#9ca3af")
+    ax.bar(x + width / 2, our_values, width, label="Our System", color="#3b82f6")
+    ax.set_ylim(0.0, 1.0)
+    ax.set_ylabel("F1")
+    ax.set_title("Per-Class F1 Comparison")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.legend()
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=220)
+    plt.close(fig)
+
+
+def save_agreement_bar_chart(
+    agreement_count: int,
+    disagreement_count: int,
+    output_path: Path,
+) -> None:
+    labels = ["Agreement", "Disagreement"]
+    values = [agreement_count, disagreement_count]
+    colors = ["#16a34a", "#dc2626"]
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.bar(labels, values, color=colors)
+    ax.set_ylabel("Count")
+    ax.set_title("Agreement vs Disagreement")
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+
+    for i, value in enumerate(values):
+        ax.text(i, value + max(values) * 0.01 if max(values) > 0 else 0.01, str(value), ha="center")
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=220)
+    plt.close(fig)
+
+
+def save_class_distribution_chart(
     labels: List[str],
     y_true: List[str],
     y_finbert: List[str],
     y_ours: List[str],
     output_path: Path,
-):
-    counts_true = [sum(1 for y in y_true if y == label) for label in labels]
-    counts_finbert = [sum(1 for y in y_finbert if y == label) for label in labels]
-    counts_ours = [sum(1 for y in y_ours if y == label) for label in labels]
+) -> None:
+    counts_true = [sum(1 for value in y_true if value == label) for label in labels]
+    counts_finbert = [sum(1 for value in y_finbert if value == label) for label in labels]
+    counts_ours = [sum(1 for value in y_ours if value == label) for label in labels]
 
     x = np.arange(len(labels))
     width = 0.25
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.bar(x - width, counts_true, width=width, label="Ground Truth")
-    ax.bar(x, counts_finbert, width=width, label="FinBERT")
-    ax.bar(x + width, counts_ours, width=width, label="Our System")
+    ax.bar(x - width, counts_true, width=width, label="Ground Truth", color="#6b7280")
+    ax.bar(x, counts_finbert, width=width, label="FinBERT", color="#9ca3af")
+    ax.bar(x + width, counts_ours, width=width, label="Our System", color="#2563eb")
     ax.set_ylabel("Count")
     ax.set_title("Class Distribution")
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
     ax.legend()
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
-    plt.close(fig)
-
-
-def save_agreement_pie(
-    agreement_rate_value: float,
-    output_path: Path,
-):
-    agreement_pct = max(0.0, min(1.0, agreement_rate_value))
-    disagreement_pct = 1.0 - agreement_pct
-
-    fig, ax = plt.subplots(figsize=(6, 6))
-    ax.pie(
-        [agreement_pct, disagreement_pct],
-        labels=["Agreement", "Disagreement"],
-        autopct="%1.1f%%",
-        colors=["#4caf50", "#f44336"],
-        startangle=90,
-    )
-    ax.set_title("FinBERT vs Our System Agreement")
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=220)
     plt.close(fig)

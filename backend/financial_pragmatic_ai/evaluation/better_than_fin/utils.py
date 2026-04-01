@@ -22,10 +22,18 @@ def ensure_results_dir(results_dir: str | Path | None = None) -> Path:
     return path
 
 
-def load_evaluation_dataset(
-    dataset_path: str | Path | None = None,
-    max_samples: int | None = None,
-) -> pd.DataFrame:
+def clear_results_dir(results_dir: str | Path) -> None:
+    path = Path(results_dir)
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+        return
+
+    for item in path.iterdir():
+        if item.is_file():
+            item.unlink()
+
+
+def load_evaluation_dataset(dataset_path: str | Path | None = None) -> pd.DataFrame:
     resolved = Path(dataset_path) if dataset_path is not None else DEFAULT_DATASET_PATH
     if not resolved.exists():
         raise FileNotFoundError(f"Dataset not found: {resolved}")
@@ -45,9 +53,6 @@ def load_evaluation_dataset(
         df["speaker"] = df["speaker"].fillna("EXECUTIVE").astype(str).str.upper()
 
     df = df[df["text"].str.len() > 0].reset_index(drop=True)
-    if max_samples is not None and max_samples > 0:
-        df = df.head(max_samples).reset_index(drop=True)
-
     return df
 
 
@@ -61,6 +66,27 @@ def intent_to_ground_truth_signal(intent: str) -> str:
 
 def build_ground_truth_signals(intents: Iterable[str]) -> List[str]:
     return [intent_to_ground_truth_signal(str(intent).upper()) for intent in intents]
+
+
+def build_balanced_signal_sample(
+    df: pd.DataFrame,
+    per_class_target: int = 80,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    sampled_parts: List[pd.DataFrame] = []
+
+    for signal in SIGNAL_LABELS:
+        subset = df[df["ground_truth_signal"] == signal]
+        take_n = min(len(subset), per_class_target)
+        if take_n > 0:
+            sampled_parts.append(subset.sample(n=take_n, random_state=random_state))
+
+    if not sampled_parts:
+        return df.iloc[0:0].copy()
+
+    balanced = pd.concat(sampled_parts, ignore_index=True)
+    balanced = balanced.sample(frac=1.0, random_state=random_state).reset_index(drop=True)
+    return balanced
 
 
 def baseline_sentiment_to_signal(sentiment_label: str) -> str:
