@@ -8,6 +8,7 @@ import {
   compareAnalyses,
   getAnalysisById,
   getHistory,
+  isUnauthorizedError,
   saveAnalysis,
   uploadTranscript,
 } from "../api/client";
@@ -58,7 +59,11 @@ export default function DashboardPage({ token, onLogout }) {
     try {
       const response = await getHistory(token);
       setHistory(response.items || []);
-    } catch (_err) {
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        onLogout();
+        return;
+      }
       setHistory([]);
     } finally {
       setHistoryLoading(false);
@@ -89,7 +94,11 @@ export default function DashboardPage({ token, onLogout }) {
 
       await saveAnalysis(token, transcript);
       await refreshHistory();
-    } catch (_err) {
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        onLogout();
+        return;
+      }
       setError("Analysis failed. Try again.");
       setResult(null);
     } finally {
@@ -116,7 +125,11 @@ export default function DashboardPage({ token, onLogout }) {
       await refreshHistory();
       setFile(null);
       setActiveTab("analyze");
-    } catch (_err) {
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        onLogout();
+        return;
+      }
       setError("Upload failed. Try again.");
       setResult(null);
     } finally {
@@ -141,7 +154,11 @@ export default function DashboardPage({ token, onLogout }) {
         drivers: detail.drivers,
       });
       setActiveTab("analyze");
-    } catch (_err) {
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        onLogout();
+        return;
+      }
       setError("Could not load history item.");
     } finally {
       setLoading(false);
@@ -158,7 +175,11 @@ export default function DashboardPage({ token, onLogout }) {
     try {
       const compared = await compareAnalyses(token, compareA, compareB);
       setCompareResult(compared);
-    } catch (_err) {
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        onLogout();
+        return;
+      }
       setCompareResult(null);
       setCompareError("Comparison failed. Try again.");
     } finally {

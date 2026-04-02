@@ -68,3 +68,7 @@ export async function uploadTranscript(token, file) {
   });
   return response.data;
 }
+
+export function isUnauthorizedError(error) {
+  return axios.isAxiosError(error) && error.response?.status === 401;
+}
