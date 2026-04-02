@@ -117,8 +117,7 @@ def run_finbert_baseline(
 
 
 def _safe_analyze(transcript_analyzer: TranscriptAnalyzer, text: str) -> List[dict]:
-    with redirect_stdout(io.StringIO()):
-        segments = transcript_analyzer.analyze(text)
+    segments = transcript_analyzer.analyze(text)
     return segments
 
 
