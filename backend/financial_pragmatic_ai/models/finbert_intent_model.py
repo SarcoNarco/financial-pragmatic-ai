@@ -1,6 +1,5 @@
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 from pathlib import Path
 
@@ -8,7 +7,7 @@ import pandas as pd
 import torch
 from torch import nn
 from torch.optim import AdamW
-from torch.utils.data import DataLoader, Dataset, TensorDataset
+from torch.utils.data import DataLoader, Dataset
 from transformers import AutoModel, AutoTokenizer
 
 # Let PyTorch use all available CPU cores for BERT inference
@@ -46,33 +45,28 @@ DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[0] / "finbert_intent.pt"
 
 class IntentTextDataset(Dataset):
 
-    def __init__(self, frame: pd.DataFrame, tokenizer, max_length: int = 128):
+    def __init__(self, frame: pd.DataFrame, tokenizer, max_length: int = 64):
         self.frame = frame.reset_index(drop=True)
+        self.tokenizer = tokenizer
         self.max_length = max_length
+        self.texts = self.frame["text"].astype(str).tolist()
+        self.labels = [INTENT_TO_INDEX[intent] for intent in self.frame["intent"].tolist()]
 
-        texts = self.frame["text"].astype(str).tolist()
-        encoded = tokenizer(
-            texts,
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, index):
+        encoded = self.tokenizer(
+            self.texts[index],
             truncation=True,
             padding="max_length",
             max_length=self.max_length,
             return_tensors="pt",
         )
-        self.input_ids = encoded["input_ids"]
-        self.attention_mask = encoded["attention_mask"]
-        self.labels = torch.tensor(
-            [INTENT_TO_INDEX[intent] for intent in self.frame["intent"].tolist()],
-            dtype=torch.long,
-        )
-
-    def __len__(self):
-        return self.input_ids.size(0)
-
-    def __getitem__(self, index):
         return {
-            "input_ids": self.input_ids[index],
-            "attention_mask": self.attention_mask[index],
-            "label": self.labels[index],
+            "input_ids": encoded["input_ids"].squeeze(0),
+            "attention_mask": encoded["attention_mask"].squeeze(0),
+            "label": torch.tensor(self.labels[index], dtype=torch.long),
         }
 
 
@@ -88,7 +82,7 @@ class FinBERTIntentModel:
 
     def __init__(self, model_name: str = MODEL_NAME, device: torch.device | None = None):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.encoder_device = torch.device("cpu")
+        self.encoder_device = self.device
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModel.from_pretrained(
             model_name,
@@ -162,9 +156,11 @@ def train_finbert_intent_model(
     dataset_path: Path | str | None = None,
     output_path: Path | str = DEFAULT_MODEL_PATH,
     max_length: int = 64,
-    batch_size: int = 64,
+    batch_size: int = 8,
     epochs: int = 4,
     learning_rate: float = 2e-5,
+    gradient_accumulation_steps: int = 4,
+    max_samples: int | None = 20000,
 ):
     resolved_dataset_path = _resolve_dataset_path(dataset_path)
     if not resolved_dataset_path.exists():
@@ -180,14 +176,27 @@ def train_finbert_intent_model(
     frame["text"] = frame["text"].fillna("").astype(str)
     frame["intent"] = frame["intent"].fillna("GENERAL_UPDATE").astype(str).str.upper()
     frame = frame[frame["intent"].isin(INTENT_LABELS)].reset_index(drop=True)
+    if max_samples is not None and len(frame) > max_samples:
+        frame = frame.sample(n=max_samples, random_state=42).reset_index(drop=True)
+        print(f"Safe mode enabled: sampled {len(frame)} rows (max_samples={max_samples})")
 
     print("Initializing model...")
     model_wrapper = FinBERTIntentModel()
+    if hasattr(model_wrapper.model, "encoder"):
+        for parameter in model_wrapper.model.encoder.parameters():
+            parameter.requires_grad = False
+
     print("Creating dataset (THIS IS TOKENIZATION)...")
     dataset = IntentTextDataset(frame, model_wrapper.tokenizer, max_length=max_length)
     print("Dataset ready.")
 
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=2,
+        pin_memory=torch.cuda.is_available(),
+    )
 
     print("Starting training loop...")
     model_wrapper.model.to(model_wrapper.encoder_device)
@@ -196,65 +205,46 @@ def train_finbert_intent_model(
     model_wrapper.classifier.train()
     optimizer = AdamW(model_wrapper.classifier.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss()
-
-    n_samples = len(dataset)
-    embed_dim = 768
-    total_batches = len(loader)
-
-    # Pre-allocate on CPU — avoids list accumulation and large torch.cat on RAM
-    X = torch.zeros(n_samples, embed_dim, dtype=torch.float32)
-    y = torch.zeros(n_samples, dtype=torch.long)
-
-    print(f"Precomputing CLS embeddings... ({total_batches} batches, {n_samples} samples)")
-    offset = 0
-    with torch.no_grad():
-        for batch_idx, batch in enumerate(loader):
-            if batch_idx % 20 == 0:
-                print(f"  Embedding batch {batch_idx + 1}/{total_batches}")
-            input_ids_cpu = batch["input_ids"].to(model_wrapper.encoder_device)
-            attention_mask_cpu = batch["attention_mask"].to(model_wrapper.encoder_device)
-            labels = batch["label"]
-
-            outputs = model_wrapper.model(
-                input_ids=input_ids_cpu,
-                attention_mask=attention_mask_cpu,
-            )
-            # Write directly into pre-allocated slice; move to CPU immediately
-            cls = outputs.last_hidden_state[:, 0, :].detach().cpu()
-            n = cls.size(0)
-            X[offset : offset + n] = cls
-            y[offset : offset + n] = labels
-            offset += n
-
-            # Free intermediates immediately
-            del outputs, cls, input_ids_cpu, attention_mask_cpu
-            torch.cuda.empty_cache()
-
-    # Single GPU transfer at the end
-    X = X[:offset].to(model_wrapper.device)
-    y = y[:offset].to(model_wrapper.device)
-
-    train_dataset = TensorDataset(X, y)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-    print(f"Embedding cache ready. X={tuple(X.shape)}, y={tuple(y.shape)}")
+    checkpoint_path = Path(output_path).with_name("finbert_intent_checkpoint.pt")
+    total_steps = len(loader)
+    optimizer.zero_grad()
 
     for epoch in range(epochs):
         total_loss = 0.0
-        for batch_idx, (X_batch, y_batch) in enumerate(train_loader):
-            if batch_idx == 0:
-                print("Running first classifier batch...")
+        for step, batch in enumerate(loader, start=1):
+            input_ids = batch["input_ids"].to(model_wrapper.encoder_device)
+            attention_mask = batch["attention_mask"].to(model_wrapper.encoder_device)
+            labels = batch["label"].to(model_wrapper.device)
 
-            optimizer.zero_grad()
-            logits = model_wrapper.classifier(X_batch)
-            loss = criterion(logits, y_batch)
+            with torch.no_grad():
+                outputs = model_wrapper.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                )
+                embeddings = outputs.last_hidden_state[:, 0, :]
 
-            loss.backward()
-            optimizer.step()
+            logits = model_wrapper.classifier(embeddings.to(model_wrapper.device))
+            loss = criterion(logits, labels)
+            scaled_loss = loss / gradient_accumulation_steps
+            scaled_loss.backward()
+
+            if step % gradient_accumulation_steps == 0 or step == total_steps:
+                optimizer.step()
+                optimizer.zero_grad()
 
             total_loss += float(loss.item())
 
-        avg_loss = total_loss / max(len(train_loader), 1)
+            if step % 50 == 0 or step == total_steps:
+                print(
+                    f"Epoch {epoch + 1}/{epochs} "
+                    f"Step {step}/{total_steps} "
+                    f"Loss {loss.item():.4f}"
+                )
+
+        avg_loss = total_loss / max(total_steps, 1)
         print(f"Epoch {epoch + 1}/{epochs} Loss {avg_loss:.4f}")
+        torch.save({"classifier": model_wrapper.classifier.state_dict()}, checkpoint_path)
+        print(f"Saved checkpoint: {checkpoint_path}")
 
     model_wrapper.save_weights(output_path)
     model_wrapper.model.eval()
