@@ -142,6 +142,7 @@ class TranscriptAnalyzer:
         return derive_signal(score)
 
     def analyze(self, raw_text):
+        print("🔥 NEW VERSION LOADED 🔥")
         segments = parse_transcript(raw_text)
         results = []
         embeddings = []
