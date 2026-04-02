@@ -151,73 +151,11 @@ class TranscriptAnalyzer:
             intent = prediction["intent"]
             text_lower = seg["text"].lower()
 
-            if intent in ["GENERAL_UPDATE", "EXECUTIVE"]:
-                if any(
-                    phrase in text_lower
-                    for phrase in [
-                        "strong growth",
-                        "revenue increased",
-                        "sales increased",
-                        "record revenue",
-                        "expanded operations",
-                        "growth accelerated",
-                        "higher demand",
-                    ]
-                ):
-                    intent = "EXPANSION"
-                elif any(
-                    phrase in text_lower
-                    for phrase in [
-                        "performance",
-                        "results",
-                        "quarter",
-                        "guidance",
-                        "outlook",
-                        "business growth",
-                        "positive momentum",
-                    ]
-                ):
-                    intent = "EXPANSION"
-                elif any(
-                    phrase in text_lower
-                    for phrase in [
-                        "increase",
-                        "improvement",
-                        "growth of",
-                        "up by",
-                        "higher than",
-                        "better than expected",
-                        "improved performance",
-                    ]
-                ):
-                    intent = "EXPANSION"
-                elif any(
-                    phrase in text_lower
-                    for phrase in [
-                        "cost pressure",
-                        "margin pressure",
-                        "decline",
-                        "risk",
-                        "inflation",
-                        "headwinds",
-                        "lower margins",
-                        "compression",
-                    ]
-                ):
-                    intent = "COST_PRESSURE"
-                elif any(
-                    phrase in text_lower
-                    for phrase in [
-                        "how",
-                        "what",
-                        "why",
-                        "could you",
-                        "guidance",
-                        "outlook",
-                        "expect going forward",
-                    ]
-                ):
-                    intent = "STRATEGIC_PROBING"
+            print("MODEL INTENT:", intent)  # DEBUG
+
+            # TEMP: DISABLE HEURISTIC OVERRIDE
+            # if intent in ["GENERAL_UPDATE", "EXECUTIVE"]:
+            #     ...
 
             results.append({
                 "speaker": seg["speaker"],
