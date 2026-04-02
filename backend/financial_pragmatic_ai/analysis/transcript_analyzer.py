@@ -164,7 +164,7 @@ class TranscriptAnalyzer:
             })
             embeddings.append(prediction["embedding"])
 
-        results = smooth_intents(results)
+        # results = smooth_intents(results)
         self._last_embeddings = embeddings[: len(results)]
 
         print("[DEBUG] SAMPLE OUTPUT:")
