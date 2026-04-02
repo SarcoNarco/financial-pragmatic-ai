@@ -4,6 +4,3 @@ pydantic
 torch
 transformers
 pdfplumber
-motor
-passlib
-python-jose[cryptography]

@@ -7,68 +7,27 @@ const api = axios.create({
   timeout: 60000,
 });
 
-function authHeader(token) {
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-export async function signup(email, password) {
-  const response = await api.post("/auth/signup", { email, password });
-  return response.data;
-}
-
-export async function login(email, password) {
-  const response = await api.post("/auth/login", { email, password });
-  return response.data;
-}
-
 export async function analyzeTranscript(transcript) {
   const response = await api.post("/analyze", { transcript });
   return response.data;
 }
 
-export async function saveAnalysis(token, transcript) {
-  const response = await api.post(
-    "/save-analysis",
-    { transcript },
-    { headers: authHeader(token) }
-  );
-  return response.data;
-}
-
-export async function getHistory(token) {
-  const response = await api.get("/history", { headers: authHeader(token) });
-  return response.data;
-}
-
-export async function getAnalysisById(token, analysisId) {
-  const response = await api.get(`/analysis/${analysisId}`, {
-    headers: authHeader(token),
+export async function compareTranscripts(transcript1, transcript2) {
+  const response = await api.post("/compare", {
+    transcript_1: transcript1,
+    transcript_2: transcript2,
   });
   return response.data;
 }
 
-export async function compareAnalyses(token, analysisId1, analysisId2) {
-  const response = await api.post(
-    "/compare",
-    { analysis_id_1: analysisId1, analysis_id_2: analysisId2 },
-    { headers: authHeader(token) }
-  );
-  return response.data;
-}
-
-export async function uploadTranscript(token, file) {
+export async function uploadTranscript(file) {
   const formData = new FormData();
   formData.append("file", file);
 
   const response = await api.post("/upload", formData, {
     headers: {
-      ...authHeader(token),
       "Content-Type": "multipart/form-data",
     },
   });
   return response.data;
-}
-
-export function isUnauthorizedError(error) {
-  return axios.isAxiosError(error) && error.response?.status === 401;
 }
