@@ -228,15 +228,14 @@ class TranscriptAnalyzer:
     def predict_intent(self, text, speaker):
         if self.intent_model is not None:
             output = self.intent_model.predict(text)
-            confidence = float(output.get("confidence", 0.0))
-            intent = output["intent"] if confidence >= 0.4 else "GENERAL_UPDATE"
+            intent = output["intent"]
             cls_embedding = output["embedding"].float()
             final_embedding = torch.cat([cls_embedding, _speaker_vector(speaker)], dim=-1)
             return {
                 "intent": intent,
                 "logits": output["logits"],
                 "embedding": final_embedding,
-                "confidence": confidence,
+                "confidence": float(output.get("confidence", 0.0)),
             }
 
         if self.fallback_intent_model is not None:

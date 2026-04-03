@@ -13,7 +13,7 @@ INTENT_TO_SCORE = {
     "EXPANSION": 1.0,
     "COST_PRESSURE": -1.0,
     "GENERAL_UPDATE": 0.0,
-    "STRATEGIC_PROBING": 0.0,
+    "STRATEGIC_PROBING": 0.2,
 }
 
 
@@ -38,9 +38,9 @@ def compute_risk_score(intents):
 
 
 def derive_signal(score):
-    if score > 0.3:
+    if score > 0.2:
         signal = "growth"
-    elif score < -0.3:
+    elif score < -0.2:
         signal = "risk"
     else:
         signal = "neutral"

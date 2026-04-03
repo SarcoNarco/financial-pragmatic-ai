@@ -186,16 +186,24 @@ class FinBERTIntentModel:
 
         logits = logits.detach().cpu()
         probs = torch.softmax(logits, dim=-1)
-        pred_idx = int(torch.argmax(probs).item())
+        pred_class = int(torch.argmax(probs).item())
+        label_map = {
+            0: "EXPANSION",
+            1: "COST_PRESSURE",
+            2: "STRATEGIC_PROBING",
+            3: "GENERAL_UPDATE",
+        }
+        intent = label_map.get(pred_class, "GENERAL_UPDATE")
         cls_embedding = cls_embedding.squeeze(0).detach().cpu()
         print("LOGITS:", logits.tolist())
-        print("PRED CLASS:", pred_idx)
+        print("PRED CLASS:", pred_class)
+        print(f"[DEBUG] CLASS → INTENT: {pred_class} → {intent}")
 
         return {
-            "intent": INDEX_TO_INTENT[pred_idx],
+            "intent": intent,
             "logits": logits,
             "embedding": cls_embedding,
-            "confidence": float(probs[pred_idx].item()),
+            "confidence": float(probs[pred_class].item()),
         }
 
 
