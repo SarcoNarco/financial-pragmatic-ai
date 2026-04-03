@@ -2,52 +2,41 @@
 
 ## 1. PROJECT OVERVIEW
 
-This repository is a full-stack financial transcript analysis system. It accepts earnings-call style transcripts (text or uploaded file), parses speaker-level segments, predicts segment intents, aggregates conversation-level financial signal, and returns structured inference outputs.
+This is a full-stack financial transcript analysis system.
 
-Core product goal:
-- Provide fast, explainable financial conversation analysis for V2 model development.
-- Current runtime is **stateless inference**: no authentication, no database, no user session persistence.
+Runtime flow:
+- React frontend sends transcript text or uploaded file to FastAPI.
+- Backend parses speaker segments, predicts intent per segment, aggregates conversation signal, then returns structured analysis.
+- The app is currently **stateless**: no authentication, no DB persistence, no user sessions.
 
-Key capabilities currently implemented:
-- Transcript parsing (structured and fallback chunking)
-- Segment-level intent prediction (hybrid model + heuristics)
-- Conversation-level signal and risk scoring
-- Market prediction + explanation
-- Driver extraction (growth/risk snippets)
-- React dashboard with Analyze + Compare workflows
+Primary capabilities currently implemented:
+- Transcript parsing for structured and unstructured earnings-call text.
+- Segment intent prediction using a finetuned FinBERT intent head (with fallback model path).
+- Conversation signal derivation (`growth | neutral | risk`).
+- Risk score, confidence, volatility, market prediction, and driver extraction.
+- UI for Analyze and Compare workflows.
 
 ---
 
 ## 2. CURRENT SYSTEM ARCHITECTURE
 
-### Backend
+### Backend (active)
 - Framework: FastAPI
 - Entry point: `/Users/saroshnadaf/Documents/NLP_Proj/backend/api/server.py`
 - Active endpoints:
   - `POST /analyze`
   - `POST /upload`
   - `POST /compare`
-- Architecture type: **stateless inference service**
-- Removed from active system:
-  - MongoDB layer
-  - JWT/auth layer
-  - history/save-analysis APIs
+- No DB/auth modules are used by runtime.
 
-### Frontend
-- Framework: React (CRA-style app)
-- API client: `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/api/client.js`
+### Frontend (active)
+- Framework: React
+- Entry point: `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/App.js`
 - Main page: `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/pages/DashboardPage.js`
-- Tabs currently active:
-  - Analyze
-  - Compare
-- Removed from active system:
-  - Login page
-  - Signup page
-  - token/session logic
-  - history API integration
+- Tabs active: `Analyze`, `Compare`
 
-### Data flow
-`Transcript text/file -> FastAPI /analyze or /upload -> EarningsCallAnalyzer -> TranscriptAnalyzer -> signal engines -> formatted JSON -> React dashboard`
+### End-to-end flow
+`text/file -> /analyze or /upload -> EarningsCallAnalyzer -> TranscriptAnalyzer -> financial_signal_engine + market_predictor + insight_engine -> JSON response -> dashboard render`
 
 ---
 
@@ -57,11 +46,10 @@ Key capabilities currently implemented:
 NLP_Proj/
 ├── AGENT_HANDOFF.md
 ├── README.md
-├── requirements.txt
 ├── backend/
 │   ├── requirements.txt
 │   ├── api/
-│   │   ├── server.py                  # active FastAPI app
+│   │   ├── server.py
 │   │   └── schemas.py
 │   └── financial_pragmatic_ai/
 │       ├── analysis/
@@ -78,259 +66,263 @@ NLP_Proj/
 │       │   └── conversation_vectorizer.py
 │       ├── models/
 │       │   ├── finbert_intent_model.py
-│       │   ├── financial_pragmatic_transformer_v2.py
 │       │   ├── conversation_attention_model.py
-│       │   ├── conversation_interaction_model.py
+│       │   ├── financial_pragmatic_transformer_v2.py
 │       │   ├── financial_pragmatic_transformer.py
-│       │   ├── finbert_base.py
 │       │   ├── intent_classifier.py
 │       │   ├── speaker_embedding.py
 │       │   ├── pragmatic_input_layer.py
 │       │   ├── pragmatic_attention.py
+│       │   ├── conversation_interaction_model.py
+│       │   ├── finbert_base.py
+│       │   ├── finbert_intent.pt
 │       │   ├── conversation_signal_model.pt
 │       │   ├── intent_classifier.pt
 │       │   └── pragmatic_transformer_trained.pt
 │       ├── data/
-│       │   ├── pragmatic_intent_dataset_clean.csv
-│       │   ├── pragmatic_intent_dataset.csv
-│       │   ├── conversation_signal_dataset.csv
-│       │   ├── intent_dataset.csv
-│       │   └── pragmatic_training_dataset/combined_pragmatic_transcripts.jsonl
 │       ├── training/
-│       │   ├── train_v2_pipeline.py
-│       │   ├── train_pragmatic_transformer.py
-│       │   ├── train_pragmatic_transformwer.py
-│       │   ├── train_intent_classifier.py
-│       │   ├── train_conversation_model.py
-│       │   └── test_load_model.py
 │       ├── testing/
-│       │   ├── test_transcript_analyzer.py
-│       │   ├── test_earnings_call_analyzer.py
-│       │   ├── test_trained_model.py
-│       │   └── evaluate_model.py
-│       ├── evaluation/
-│       │   └── better_than_fin/
-│       │       ├── evaluate.py
-│       │       ├── metrics.py
-│       │       ├── utils.py
-│       │       └── visualize.py
+│       ├── evaluation/better_than_fin/
+│       │   ├── evaluate.py
+│       │   ├── metrics.py
+│       │   ├── utils.py
+│       │   └── visualize.py
 │       ├── inference/
-│       │   ├── signal_extractor.py
-│       │   └── decision_engine.py
 │       └── utils/
-│           ├── device.py
-│           ├── check_mps.py
-│           ├── transcript_parser.py
-│           ├── financial_event_tokenizer.py
-│           └── pragmatic_analyzer.py
 └── frontend/
-    ├── package.json
     ├── src/
     │   ├── App.js
+    │   ├── index.js
+    │   ├── index.css
+    │   ├── App.css
     │   ├── api/client.js
     │   ├── pages/DashboardPage.js
     │   └── components/
     │       ├── SummaryCard.js
     │       ├── TimelineChart.js
     │       └── SignalHeatmap.js
-    └── build/                           # committed build artifacts
+    └── package.json
 ```
 
-Notes:
-- `/Users/saroshnadaf/Documents/NLP_Proj/backend/api/auth.py` was removed.
-- `/Users/saroshnadaf/Documents/NLP_Proj/backend/api/database.py` was removed.
-- `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/pages/LoginPage.js` was removed.
-- `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/pages/SignupPage.js` was removed.
+Removed app-layer files (confirmed absent):
+- `backend/api/auth.py`
+- `backend/api/database.py`
+- `frontend/src/pages/LoginPage.js`
+- `frontend/src/pages/SignupPage.js`
 
 ---
 
-## 4. BACKEND API CONTRACT (ACTIVE)
+## 4. ACTIVE API CONTRACT
 
 ### `POST /analyze`
-- Request:
+Request:
 ```json
 { "transcript": "CEO: ..." }
 ```
-- Response (from `_run_analysis`):
-  - `score`
-  - `signal`
-  - `prediction`
-  - `prediction_explanation`
-  - `confidence`
-  - `volatility`
-  - `volatility_std`
-  - `intent_distribution`
-  - `insight`
-  - `segments`
-  - `drivers`
-- Error mode:
-  - `{ "error": "Could not parse transcript" }`
+Response keys:
+- `score`
+- `signal`
+- `prediction`
+- `prediction_explanation`
+- `confidence`
+- `volatility`
+- `volatility_std`
+- `intent_distribution`
+- `insight`
+- `segments`
+- `drivers`
 
 ### `POST /upload`
 - Input: multipart file (`.txt` or `.pdf`)
-- Flow: decode/extract text -> `_run_analysis`
-- Response: same payload as `/analyze`
-- Error responses:
-  - unsupported file type
-  - pdf parsing failure
-  - txt decode failure
+- Flow: text extraction -> `_run_analysis`
+- Output schema matches `/analyze`
 
 ### `POST /compare`
-- Request:
+Request:
 ```json
 { "transcript_1": "...", "transcript_2": "..." }
 ```
-- Response:
-  - `transcript_1` (analysis payload)
-  - `transcript_2` (analysis payload)
-  - `signal_difference`
-  - `risk_delta`
-  - `confidence_delta`
-  - `trend`
-  - `comparison`
-- No persisted IDs are used.
+Response keys:
+- `transcript_1`
+- `transcript_2`
+- `signal_difference`
+- `risk_delta`
+- `confidence_delta`
+- `trend`
+- `comparison`
+
+Not implemented:
+- `/auth/*`
+- `/save-analysis`
+- `/history`
+- `/analysis/{id}`
 
 ---
 
-## 5. FRONTEND IMPLEMENTATION (ACTIVE)
+## 5. MODEL DETAILS (CURRENT)
 
-### App composition
-- `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/App.js`
-  - always renders `DashboardPage`
-  - no auth guard
+### FinBERT intent model (`finbert_intent_model.py`)
+- Uses: `BertForSequenceClassification` (`yiyanghkust/finbert-tone`)
+- Labels:
+  - `EXPANSION`
+  - `COST_PRESSURE`
+  - `STRATEGIC_PROBING`
+  - `GENERAL_UPDATE`
+- Classifier head is replaced with:
+  - `Linear(hidden, 256) -> ReLU -> Linear(256, 4)`
+- `load_weights()` behavior:
+  - expects `{"classifier": state_dict}` in `finbert_intent.pt`
+  - validates required keys: `0.weight`, `0.bias`, `2.weight`, `2.bias`
+  - prints `missing_keys` and `unexpected_keys`
+  - raises RuntimeError if classifier weights are missing
+- `predict()`:
+  - uses model logits directly
+  - returns `intent`, `logits`, `embedding`, `confidence`
+  - currently prints debug:
+    - `LOGITS: ...`
+    - `PRED CLASS: ...`
 
-### Dashboard behavior
-- `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/pages/DashboardPage.js`
-- Analyze tab:
-  - textarea input
-  - analyze button (`/analyze`)
-  - file upload (`/upload`)
-  - displays summary, timeline, heatmap, signal distribution, drivers
-- Compare tab:
-  - two transcript textareas
-  - compare button (`/compare`)
-  - displays deltas and trend
+### Transcript analyzer (`transcript_analyzer.py`)
+- Tries to load `finbert_intent.pt`; if missing, falls back to pragmatic transformer.
+- If classifier load fails with RuntimeError, exception is re-raised.
+- Current debug prints in `analyze()`:
+  - `🔥 NEW VERSION LOADED 🔥`
+  - `MODEL INTENT: ...`
+- Heuristic intent override: **currently disabled**.
+- Intent smoothing call: **currently commented out** (`# results = smooth_intents(results)`).
+
+### Conversation model usage
+- Uses `ConversationAttentionModel` only if `conversation_attention.pt` exists.
+- `conversation_attention.pt` is **not present** in models folder.
+- Runtime therefore falls back to score-based signal path for conversation signal.
+
+---
+
+## 6. SIGNAL AGGREGATION LOGIC (CURRENT)
+
+File: `analysis/financial_signal_engine.py`
+
+### `compute_risk_score(intents)`
+- Current mapping:
+  - `EXPANSION` -> `+1.0`
+  - `STRONG_GROWTH` -> `+1.0`
+  - `COST_PRESSURE` -> `-1.0`
+  - `RISK` -> `-1.0`
+  - `GENERAL_UPDATE` -> `0.0`
+  - `STRATEGIC_PROBING` -> `0.0`
+- Returns mean score across intents.
+- Current debug prints:
+  - `INTENTS: ...`
+  - `SCORE: ...`
+
+### `derive_signal(score)`
+- Current thresholds:
+  - `score > 0.2` -> `growth`
+  - `score < -0.2` -> `risk`
+  - else `neutral`
+- Current debug prints:
+  - `FINAL SCORE: ...`
+  - `FINAL SIGNAL: ...`
+
+### Important consistency note (verified from code)
+`backend/api/server.py::_run_analysis()` currently clamps score to ranges `<=35`, `>=65`, or `36..64` before calling `derive_signal()`, while `derive_signal()` now expects a small-range score around `[-1, 1]`.
+
+This is a live logic mismatch and can skew final API `signal` output.
+
+---
+
+## 7. FRONTEND STATE (CURRENT)
 
 ### API client
-- `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/api/client.js`
-- exported functions:
-  - `analyzeTranscript`
-  - `uploadTranscript`
-  - `compareTranscripts`
-- no token/header injection logic
+- `frontend/src/api/client.js`
+- Functions:
+  - `analyzeTranscript(transcript)` -> `/analyze`
+  - `uploadTranscript(file)` -> `/upload`
+  - `compareTranscripts(transcript1, transcript2)` -> `/compare`
+
+### Dashboard UI
+- `DashboardPage.js` is the only page.
+- Analyze tab:
+  - transcript textarea
+  - upload control
+  - summary, timeline, heatmap, distribution, growth/risk driver panels
+- Compare tab:
+  - two transcript textareas
+  - compare result panel
+
+### Visual components
+- `SummaryCard.js`: score/prediction/confidence/volatility cards and confidence bar
+- `TimelineChart.js`: smoothed line chart with tooltips
+- `SignalHeatmap.js`: intent count cards
 
 ---
 
-## 6. INFERENCE PIPELINE DETAILS
+## 8. EVALUATION PIPELINE (CURRENT)
 
-### Core orchestration
-- `_run_analysis()` in `/Users/saroshnadaf/Documents/NLP_Proj/backend/api/server.py`
-- Calls `EarningsCallAnalyzer.analyze(transcript)` and then computes:
-  - risk score normalization
-  - derived signal
-  - confidence
-  - volatility (+ std)
-  - intent distribution
-  - market prediction
-  - insight text
-  - key drivers
+Path: `backend/financial_pragmatic_ai/evaluation/better_than_fin/evaluate.py`
 
-### Analyzer stack
-1. `analysis/transcript_parser.py`
-   - cleans text
-   - extracts `NAME:` speaker blocks when possible
-   - infers role (`CEO`, `CFO`, `ANALYST`, `OPERATOR`, `EXECUTIVE`)
-   - fallback chunking when explicit speaker tags are missing
-
-2. `analysis/transcript_analyzer.py`
-   - predicts intent per segment via `FinBERTIntentModel` when available
-   - fallback to `FinancialPragmaticTransformer` when needed
-   - applies keyword-based override logic
-   - applies weighted smoothing (`smooth_intents`)
-   - attempts conversation-attention inference if model file exists and embeddings align
-
-3. `analysis/earnings_call_analyzer.py`
-   - builds timeline window signals
-   - aggregates dominant signal
-   - returns `segments`, `timeline_signals`, `aggregation`, `insight`
-
-4. `analysis/financial_signal_engine.py`
-   - computes score/signal/confidence/volatility/distribution
-
-5. `analysis/market_predictor.py`
-   - computes `UP | DOWN | VOLATILE | NEUTRAL` + explanation
-
-6. `analysis/insight_engine.py`
-   - extracts top growth and risk drivers
+- `_safe_analyze()` no longer suppresses stdout.
+- Evaluation prints prediction distributions:
+  - `FinBERT prediction distribution: ...`
+  - `Our system prediction distribution: ...`
+- Collapse guard:
+  - prints `[ERROR] Model collapse detected` if one class >80% of custom predictions.
+- No model retraining happens in evaluation.
 
 ---
 
-## 7. MODEL + ARTIFACT STATUS
+## 9. KNOWN LIMITATIONS / RISKS
 
-### Present `.pt` files
-- `conversation_signal_model.pt`
-- `intent_classifier.pt`
-- `pragmatic_transformer_trained.pt`
+1. **Score scale mismatch in API path**
+   - `_run_analysis()` clamps score to 35/65 style range, but `derive_signal()` expects near-zero thresholds.
 
-### Referenced but may be missing at runtime
-- `finbert_intent.pt` (used by `FinBERTIntentModel.load_weights`)
-- `conversation_attention.pt` (used by attention-based conversation signal path)
+2. **Conversation attention weights missing**
+   - `conversation_attention.pt` not present, so rule-based fallback is used.
 
-Runtime behavior when missing:
-- system logs warnings and uses fallback/hybrid inference paths.
+3. **Debug logging is very verbose**
+   - logits, intents, and score prints are active in runtime.
 
----
-
-## 8. TRAINING + EVALUATION STATUS
-
-Training scripts exist under:
-- `/Users/saroshnadaf/Documents/NLP_Proj/backend/financial_pragmatic_ai/training/`
-
-Evaluation suite exists under:
-- `/Users/saroshnadaf/Documents/NLP_Proj/backend/financial_pragmatic_ai/evaluation/better_than_fin/`
-
-Important:
-- This handoff reflects runtime app wiring only.
-- No retraining is required for current stateless API operation.
-
----
-
-## 9. KNOWN LIMITATIONS (CURRENT)
-
-- No persistence layer: outputs are not saved.
-- No user authentication: API is open for local/dev usage.
-- Inference quality depends on available local model weights.
-- Conversation attention path may fallback when `conversation_attention.pt` is absent.
-- Compare endpoint is transcript-to-transcript only (no saved analysis IDs).
+4. **Fallback behavior exists**
+   - if finetuned checkpoint is missing, system falls back to pragmatic transformer intent model.
 
 ---
 
 ## 10. HOW TO RUN
 
-### Backend
+Backend:
 ```bash
 cd /Users/saroshnadaf/Documents/NLP_Proj/backend
 pip install -r requirements.txt
 uvicorn api.server:app --reload
 ```
 
-### Frontend
+Frontend:
 ```bash
 cd /Users/saroshnadaf/Documents/NLP_Proj/frontend
 npm install
 npm start
 ```
 
-### URLs
-- UI: `http://localhost:3000`
+URLs:
 - API: `http://127.0.0.1:8000`
+- UI: `http://localhost:3000`
 
 ---
 
-## 11. IMPORTANT NOTES FOR NEXT AGENT
+## 11. RECENT DEBUGGING CHANGES (LATEST)
 
-- Do not reintroduce MongoDB or JWT unless explicitly requested.
+- FinBERT intent loader switched to `BertForSequenceClassification` with explicit classifier head checks.
+- Transcript analyzer heuristic override disabled.
+- Transcript analyzer smoothing disabled.
+- `_safe_analyze()` in evaluation no longer redirects stdout.
+- Aggregation debug prints added in `financial_signal_engine.py`.
+
+---
+
+## 12. IMPORTANT NOTES FOR NEXT AGENT
+
+- Do not assume legacy auth/database still exists; runtime is stateless.
+- If fixing final signal correctness, start with `_run_analysis()` + `compute_risk_score()`/`derive_signal()` scale alignment.
+- Keep changes modular: model loading, parser, and API aggregation are separate concerns.
+- If reducing log noise, remove temporary debug prints only after validating intent/signal distributions.
 - Preserve `/analyze` response schema to avoid frontend breakage.
-- Keep model/training/evaluation modules untouched for app-layer work.
-- Prefer extending analysis modules rather than rewriting runtime API contract.
-- Validate both Analyze and Compare flows after any UI/API changes.
