@@ -3,35 +3,55 @@ import statistics
 
 INTENT_TO_SIGNAL = {
     "EXPANSION": "growth",
+    "STRONG_GROWTH": "growth",
     "GENERAL_UPDATE": "neutral",
     "STRATEGIC_PROBING": "risk",
     "COST_PRESSURE": "risk",
+    "RISK": "risk",
 }
 
 SIGNAL_TO_VALUE = {"growth": -1.0, "neutral": 0.0, "risk": 1.0}
+INTENT_TO_SCORE = {
+    "EXPANSION": 1.0,
+    "STRONG_GROWTH": 1.0,
+    "COST_PRESSURE": -1.0,
+    "RISK": -1.0,
+    "GENERAL_UPDATE": 0.0,
+    "STRATEGIC_PROBING": 0.0,
+}
 
 
 def compute_risk_score(intents):
-    score = 45
+    if not intents:
+        print("INTENTS:", intents)
+        print("SCORE:", 0.0)
+        return 0.0
 
+    score_sum = 0.0
+    mapped_intents = []
     for item in intents:
-        if item["intent"] == "COST_PRESSURE":
-            score += 3
-        elif item["intent"] == "STRATEGIC_PROBING":
-            score += 1
-        elif item["intent"] == "EXPANSION":
-            score -= 1
+        intent = str(item.get("intent", "GENERAL_UPDATE")).upper()
+        value = INTENT_TO_SCORE.get(intent, 0.0)
+        mapped_intents.append({"intent": intent, "value": value})
+        score_sum += value
 
-    return max(5, min(95, score))
+    score = score_sum / float(len(intents))
+    print("INTENTS:", mapped_intents)
+    print("SCORE:", score)
+    return float(score)
 
 
 def derive_signal(score):
-    if score >= 65:
-        return "risk"
-    elif score <= 35:
-        return "growth"
+    if score > 0.2:
+        signal = "growth"
+    elif score < -0.2:
+        signal = "risk"
     else:
-        return "neutral"
+        signal = "neutral"
+
+    print("FINAL SCORE:", score)
+    print("FINAL SIGNAL:", signal)
+    return signal
 
 
 def derive_market_prediction(score):
