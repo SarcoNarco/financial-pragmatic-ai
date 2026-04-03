@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 import torch
 
@@ -107,6 +108,122 @@ class TranscriptAnalyzer:
         if self.conversation_model is None:
             print("[WARN] Conversation attention model not found. Using rule-based fallback.")
 
+    @staticmethod
+    def _clean_text(text: str) -> str:
+        return re.sub(r"\s+", " ", str(text or "")).strip()
+
+    @staticmethod
+    def _split_sentences(text: str) -> list[str]:
+        cleaned = TranscriptAnalyzer._clean_text(text)
+        if not cleaned:
+            return []
+
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+", cleaned)
+            if sentence.strip()
+        ]
+
+        if len(sentences) <= 1:
+            comma_split = [
+                part.strip()
+                for part in re.split(r"[;:]\s+|,\s+(?=[A-Z])", cleaned)
+                if part.strip()
+            ]
+            if len(comma_split) > 1:
+                sentences = comma_split
+
+        if len(sentences) <= 1:
+            words = cleaned.split()
+            if len(words) > 45:
+                sentences = [
+                    " ".join(words[index : index + 24])
+                    for index in range(0, len(words), 24)
+                ]
+
+        return sentences if sentences else [cleaned]
+
+    @staticmethod
+    def _chunk_sentences(sentences: list[str]) -> list[str]:
+        if not sentences:
+            return []
+
+        n_sentences = len(sentences)
+        if n_sentences <= 3:
+            chunk_size = 1
+        elif n_sentences <= 9:
+            chunk_size = 2
+        else:
+            chunk_size = 3
+
+        chunks = []
+        for index in range(0, n_sentences, chunk_size):
+            chunk = " ".join(sentences[index : index + chunk_size]).strip()
+            if chunk:
+                chunks.append(chunk)
+        return chunks
+
+    def _segment_with_speaker_cues(self, raw_text: str) -> list[dict]:
+        text = self._clean_text(raw_text)
+        if not text:
+            return []
+
+        pattern = re.compile(r"(CEO|CFO|ANALYST|EXECUTIVE|OPERATOR)\s*:\s*", re.IGNORECASE)
+        parts = pattern.split(text)
+        if len(parts) < 3:
+            return []
+
+        segments: list[dict] = []
+        preface = parts[0].strip()
+        if preface:
+            for chunk in self._chunk_sentences(self._split_sentences(preface)):
+                segments.append({"speaker": "EXECUTIVE", "text": chunk})
+
+        for idx in range(1, len(parts), 2):
+            if idx + 1 >= len(parts):
+                break
+            speaker = parts[idx].upper()
+            block_text = parts[idx + 1].strip()
+            if not block_text:
+                continue
+            block_sentences = self._split_sentences(block_text)
+            for chunk in self._chunk_sentences(block_sentences):
+                segments.append({"speaker": speaker, "text": chunk})
+
+        return segments
+
+    def _build_segments(self, raw_text: str) -> list[dict]:
+        segments = self._segment_with_speaker_cues(raw_text)
+
+        if not segments:
+            parsed = parse_transcript(raw_text)
+            for parsed_segment in parsed:
+                speaker = str(parsed_segment.get("speaker", "EXECUTIVE")).upper()
+                text = str(parsed_segment.get("text", "")).strip()
+                if not text:
+                    continue
+
+                sentences = self._split_sentences(text)
+                for chunk in self._chunk_sentences(sentences):
+                    segments.append({"speaker": speaker, "text": chunk})
+
+        segments = [
+            segment
+            for segment in segments
+            if segment["text"].strip() and len(segment["text"].strip()) >= 10
+        ]
+
+        if len(segments) <= 1:
+            text = self._clean_text(raw_text)
+            base_sentences = self._split_sentences(text)
+            fallback_chunks = self._chunk_sentences(base_sentences)
+            if len(fallback_chunks) > 1:
+                segments = [{"speaker": "EXECUTIVE", "text": chunk} for chunk in fallback_chunks]
+            elif fallback_chunks:
+                segments = [{"speaker": "EXECUTIVE", "text": fallback_chunks[0]}]
+
+        return segments
+
     def predict_intent(self, text, speaker):
         if self.intent_model is not None:
             output = self.intent_model.predict(text)
@@ -154,7 +271,8 @@ class TranscriptAnalyzer:
 
     def analyze(self, raw_text):
         print("🔥 NEW VERSION LOADED 🔥")
-        segments = parse_transcript(raw_text)
+        segments = self._build_segments(raw_text)
+        print(f"[DEBUG] Parsed {len(segments)} segments")
         results = []
         embeddings = []
 
