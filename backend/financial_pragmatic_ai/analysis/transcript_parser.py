@@ -15,6 +15,9 @@ ANALYST_KEYWORDS = [
     "question", "how", "what", "why", "could you", "can you"
 ]
 
+SPEAKER_CUE_PATTERN = re.compile(r"(?=(?:Analyst|Executive|CFO|CEO|Operator)\s*:)", re.IGNORECASE)
+SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
+
 
 def clean_text(text: str) -> str:
     text = text.replace("\n", " ")
@@ -78,6 +81,52 @@ def infer_role(name: str, text: str):
     return "EXECUTIVE"
 
 
+def _chunk_by_sentences(text: str, chunk_size: int = 2):
+    sentences = [sentence.strip() for sentence in SENTENCE_SPLIT_PATTERN.split(text) if sentence.strip()]
+    if not sentences:
+        return []
+
+    chunks = []
+    for i in range(0, len(sentences), chunk_size):
+        chunk = " ".join(sentences[i : i + chunk_size]).strip()
+        if len(chunk) >= 30:
+            chunks.append(chunk)
+    return chunks
+
+
+def _split_block(name: str, text: str):
+    parts = [part.strip() for part in SPEAKER_CUE_PATTERN.split(text) if part.strip()]
+    results = []
+
+    if len(parts) <= 1:
+        chunks = _chunk_by_sentences(text, chunk_size=2)
+        if len(chunks) > 1:
+            return [{"name": name, "text": chunk} for chunk in chunks]
+        return [{"name": name, "text": text.strip()}]
+
+    for part in parts:
+        matched = re.match(r"^(Analyst|Executive|CFO|CEO|Operator)\s*:\s*(.*)$", part, re.IGNORECASE | re.DOTALL)
+        if matched:
+            local_name = matched.group(1).upper()
+            content = matched.group(2).strip()
+        else:
+            local_name = name
+            content = part
+
+        if not content:
+            continue
+
+        chunks = _chunk_by_sentences(content, chunk_size=2)
+        if len(chunks) > 1:
+            for chunk in chunks:
+                results.append({"name": local_name, "text": chunk})
+        else:
+            if len(content) >= 30:
+                results.append({"name": local_name, "text": content})
+
+    return results
+
+
 def fallback_chunking(text: str):
     """
     If no speaker blocks found -> split into semantic chunks
@@ -117,6 +166,18 @@ def parse_transcript(text: str):
 
     if len(blocks) == 0:
         blocks = fallback_chunking(text)
+    else:
+        expanded_blocks = []
+        for block in blocks:
+            expanded_blocks.extend(_split_block(block["name"], block["text"]))
+        if expanded_blocks:
+            blocks = expanded_blocks
+
+    if len(blocks) == 1:
+        block = blocks[0]
+        fallback_chunks = _chunk_by_sentences(block["text"], chunk_size=2)
+        if len(fallback_chunks) > 1:
+            blocks = [{"name": block["name"], "text": chunk} for chunk in fallback_chunks]
 
     segments = []
 
