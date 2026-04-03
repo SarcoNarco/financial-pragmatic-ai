@@ -365,7 +365,7 @@ URLs:
   - `lr = 2e-5`
   - `batch_size = 16`
 - Model is saved with:
-  - `save_pretrained("models/finbert_intent_v2")`
+  - `save_pretrained("models/finbert_intent_v3")`
 
 ### CURRENT MODEL STATUS
 - Model is trained and loaded from pretrained directory format.

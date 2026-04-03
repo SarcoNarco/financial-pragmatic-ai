@@ -9,7 +9,7 @@ from financial_pragmatic_ai.models.finbert_intent_model import train_finbert_int
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 DATASET_PATH = PACKAGE_ROOT / "data" / "pragmatic_intent_dataset_clean.csv"
-OUTPUT_DIR = PACKAGE_ROOT / "models" / "finbert_intent_v2"
+OUTPUT_DIR = PACKAGE_ROOT / "models" / "finbert_intent_v3"
 
 
 def main() -> None:

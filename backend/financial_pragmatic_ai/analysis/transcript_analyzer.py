@@ -21,7 +21,7 @@ from financial_pragmatic_ai.models.finbert_intent_model import FinBERTIntentMode
 
 MODELS_DIR = Path(__file__).resolve().parents[1] / "models"
 FALLBACK_MODEL_PATH = MODELS_DIR / "pragmatic_transformer_trained.pt"
-FINBERT_INTENT_DIR = MODELS_DIR / "finbert_intent_v2"
+FINBERT_INTENT_DIR = MODELS_DIR / "finbert_intent_v3"
 CONVERSATION_ATTENTION_PATH = MODELS_DIR / "conversation_attention.pt"
 
 if torch.backends.mps.is_available():

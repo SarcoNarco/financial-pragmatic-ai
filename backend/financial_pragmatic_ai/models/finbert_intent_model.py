@@ -42,7 +42,7 @@ ID2LABEL = {
 DEFAULT_DATASET_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "pragmatic_intent_dataset_clean.csv"
 )
-DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[0] / "finbert_intent_v2"
+DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[0] / "finbert_intent_v3"
 
 _SIGNAL_TO_INTENT = {
     "GROWTH": "EXPANSION",
@@ -58,6 +58,27 @@ _PROBING_START_PATTERN = re.compile(
     r"^\s*(?:can you|what is|how|could you)\b",
     re.IGNORECASE,
 )
+RISK_KEYWORDS = [
+    "decline",
+    "decrease",
+    "drop",
+    "fall",
+    "weakness",
+    "pressure",
+    "margin pressure",
+    "cost increase",
+    "inflation",
+    "headwind",
+    "uncertainty",
+    "slowdown",
+    "challenging",
+    "soft demand",
+    "lower revenue",
+    "compression",
+    "volatility",
+    "risk",
+    "exposure",
+]
 _TRANSCRIPT_ID_COLUMNS = (
     "transcript_id",
     "call_id",
@@ -180,10 +201,21 @@ def _apply_intent_mapping(frame: pd.DataFrame) -> pd.DataFrame:
     signals = build_ground_truth_signals(prepared["source_label"].tolist())
     prepared["intent"] = [_SIGNAL_TO_INTENT[signal.upper()] for signal in signals]
 
+    text_lower = prepared["text"].astype(str).str.lower()
+    risk_mask = text_lower.apply(
+        lambda text: any(keyword in text for keyword in RISK_KEYWORDS)
+    )
+    risk_override_count = int(risk_mask.sum())
+    prepared.loc[risk_mask, "intent"] = "COST_PRESSURE"
+
     question_mask = prepared["text"].str.contains(_ANALYST_QUESTION_PATTERN, regex=True)
     starter_mask = prepared["text"].str.contains(_PROBING_START_PATTERN, regex=True)
     probing_mask = question_mask | starter_mask
     prepared.loc[probing_mask, "intent"] = "STRATEGIC_PROBING"
+
+    final_distribution = prepared["intent"].value_counts().to_dict()
+    print(f"Risk keyword override count: {risk_override_count}")
+    print(f"Final class distribution after mapping: {final_distribution}")
 
     return prepared[["text", "speaker", "transcript_id", "intent"]]
 
