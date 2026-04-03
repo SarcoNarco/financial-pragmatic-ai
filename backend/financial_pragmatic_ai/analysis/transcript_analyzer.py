@@ -21,7 +21,7 @@ from financial_pragmatic_ai.models.finbert_intent_model import FinBERTIntentMode
 
 MODELS_DIR = Path(__file__).resolve().parents[1] / "models"
 FALLBACK_MODEL_PATH = MODELS_DIR / "pragmatic_transformer_trained.pt"
-FINBERT_INTENT_PATH = MODELS_DIR / "finbert_intent.pt"
+FINBERT_INTENT_DIR = MODELS_DIR / "finbert_intent_v2"
 CONVERSATION_ATTENTION_PATH = MODELS_DIR / "conversation_attention.pt"
 
 if torch.backends.mps.is_available():
@@ -73,19 +73,9 @@ class TranscriptAnalyzer:
         self._last_embeddings = []
 
         try:
-            self.intent_model = FinBERTIntentModel(device=device)
-            loaded = self.intent_model.load_weights(FINBERT_INTENT_PATH)
-            if not loaded:
-                print(
-                    f"[WARN] FinBERT intent checkpoint not found at {FINBERT_INTENT_PATH}. "
-                    "Falling back to pragmatic transformer."
-                )
-                self.intent_model = None
-            else:
-                print(f"[INFO] Loaded FinBERT intent weights from: {FINBERT_INTENT_PATH}")
-        except RuntimeError as exc:
-            print(f"[ERROR] FinBERT intent classifier load failed: {exc}")
-            raise
+            self.intent_model = FinBERTIntentModel(model_dir=FINBERT_INTENT_DIR, device=device)
+            print(f"[INFO] Loaded FinBERT intent model from: {FINBERT_INTENT_DIR}")
+            print(f"[INFO] FinBERT intent num_labels: {self.intent_model.model.config.num_labels}")
         except Exception as exc:
             print(f"[WARN] FinBERT intent model unavailable: {exc}")
             self.intent_model = None

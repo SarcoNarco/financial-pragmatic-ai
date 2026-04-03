@@ -26,7 +26,7 @@ from financial_pragmatic_ai.models.speaker_embedding import SPEAKER_TO_INDEX
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = PACKAGE_ROOT / "data" / "pragmatic_intent_dataset_clean.csv"
-FINBERT_INTENT_PATH = PACKAGE_ROOT / "models" / "finbert_intent.pt"
+FINBERT_INTENT_PATH = PACKAGE_ROOT / "models" / "finbert_intent_v2"
 CONVERSATION_ATTENTION_PATH = PACKAGE_ROOT / "models" / "conversation_attention.pt"
 EMBEDDINGS_DIR = Path("./embeddings")
 
