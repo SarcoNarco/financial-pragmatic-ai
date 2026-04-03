@@ -255,6 +255,7 @@ def train_finbert_intent_model(
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     train_dataset = _build_hf_train_dataset(train_frame, tokenizer=tokenizer, max_length=max_length)
+    eval_dataset = train_dataset
 
     model = AutoModelForSequenceClassification.from_pretrained(
         MODEL_NAME,
@@ -280,7 +281,7 @@ def train_finbert_intent_model(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        tokenizer=tokenizer,
+        eval_dataset=eval_dataset,
     )
     trainer.train()
 
