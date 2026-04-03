@@ -3,4 +3,5 @@ uvicorn
 pydantic
 torch
 transformers
+datasets
 pdfplumber

@@ -5,12 +5,16 @@ from pathlib import Path
 
 import pandas as pd
 import torch
-from torch.utils.data import Dataset
+from datasets import Dataset as HFDataset
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     Trainer,
     TrainingArguments,
+)
+from financial_pragmatic_ai.evaluation.better_than_fin.utils import (
+    build_ground_truth_signals,
+    load_evaluation_dataset,
 )
 
 
@@ -51,6 +55,10 @@ _ANALYST_QUESTION_PATTERN = re.compile(
     r"\?|\bcould you\b|\bcan you\b|\bhow\b|\bwhat\b|\bwhy\b|\bguidance\b",
     re.IGNORECASE,
 )
+_PROBING_START_PATTERN = re.compile(
+    r"^\s*(?:can you|what is|how|could you)\b",
+    re.IGNORECASE,
+)
 
 
 def _resolve_output_dir(output_path: Path | str | None) -> Path:
@@ -69,90 +77,79 @@ def _resolve_dataset_path(dataset_path: Path | str | None) -> Path:
     return Path(dataset_path)
 
 
-def _to_intent_label(raw_value: str) -> str:
-    value = str(raw_value or "").strip().upper()
-    if value in INTENT_LABELS:
-        return value
-    if value in _SIGNAL_TO_INTENT:
-        return _SIGNAL_TO_INTENT[value]
-    return "GENERAL_UPDATE"
-
-
-def _prepare_training_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    columns = {column: column.strip().lower() for column in frame.columns}
-    frame = frame.rename(columns=columns)
-
-    if "text" not in frame.columns:
-        raise ValueError("Dataset must include 'text' column")
-
-    if "intent" not in frame.columns and "signal" not in frame.columns:
-        raise ValueError("Dataset must include either 'intent' or 'signal' column")
-
-    if "intent" in frame.columns:
-        intent_source = frame["intent"]
+def _build_intent_frame_from_eval(frame: pd.DataFrame) -> pd.DataFrame:
+    prepared = frame.copy()
+    prepared["text"] = prepared["text"].fillna("").astype(str)
+    if "speaker" in prepared.columns:
+        prepared["speaker"] = prepared["speaker"].fillna("EXECUTIVE").astype(str).str.upper()
     else:
-        intent_source = frame["signal"]
+        prepared["speaker"] = "EXECUTIVE"
+    prepared["intent"] = prepared["intent"].fillna("GENERAL_UPDATE").astype(str).str.upper()
 
-    prepared = pd.DataFrame(
+    prepared = prepared[prepared["text"].str.strip().str.len() > 0].reset_index(drop=True)
+    if prepared.empty:
+        raise ValueError("Evaluation dataset is empty after text cleaning.")
+
+    signals = build_ground_truth_signals(prepared["intent"].tolist())
+    mapped_intent = [_SIGNAL_TO_INTENT[signal.upper()] for signal in signals]
+    prepared["mapped_intent"] = mapped_intent
+
+    question_mask = prepared["text"].str.contains(_ANALYST_QUESTION_PATTERN, regex=True)
+    starter_mask = prepared["text"].str.contains(_PROBING_START_PATTERN, regex=True)
+    probing_mask = question_mask | starter_mask
+
+    prepared.loc[probing_mask, "mapped_intent"] = "STRATEGIC_PROBING"
+
+    return prepared[["text", "mapped_intent"]].rename(columns={"mapped_intent": "intent"})
+
+
+def _balance_intent_frame(frame: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
+    counts = frame["intent"].value_counts().to_dict()
+    missing = [label for label in INTENT_LABELS if counts.get(label, 0) == 0]
+    if missing:
+        raise ValueError(
+            f"Cannot train 4-class model; missing labels after mapping/heuristics: {missing}. "
+            f"Counts: {counts}"
+        )
+
+    target_size = min(counts[label] for label in INTENT_LABELS)
+    if target_size == 0:
+        raise ValueError(f"Invalid balanced target size 0. Counts: {counts}")
+
+    balanced_parts = []
+    for label in INTENT_LABELS:
+        subset = frame[frame["intent"] == label]
+        balanced_parts.append(subset.sample(n=target_size, random_state=random_state))
+
+    balanced = pd.concat(balanced_parts, ignore_index=True)
+    balanced = balanced.sample(frac=1.0, random_state=random_state).reset_index(drop=True)
+    return balanced
+
+
+def _build_hf_train_dataset(frame: pd.DataFrame, tokenizer, max_length: int = 128) -> HFDataset:
+    # Required HF fields: text, label
+    hf_source = pd.DataFrame(
         {
-            "text": frame["text"].fillna("").astype(str),
-            "intent": intent_source.fillna("GENERAL_UPDATE").astype(str),
-            "speaker": frame.get("speaker", "EXECUTIVE"),
+            "text": frame["text"].astype(str),
+            "label": frame["intent"].map(INTENT_TO_INDEX).astype(int),
         }
     )
 
-    prepared["speaker"] = prepared["speaker"].fillna("EXECUTIVE").astype(str).str.upper()
-    prepared["intent"] = prepared["intent"].map(_to_intent_label)
+    dataset = HFDataset.from_pandas(hf_source, preserve_index=False)
 
-    analyst_mask = prepared["speaker"].eq("ANALYST")
-    question_mask = prepared["text"].str.contains(_ANALYST_QUESTION_PATTERN, regex=True)
-    probing_mask = analyst_mask | question_mask
-    prepared.loc[probing_mask, "intent"] = "STRATEGIC_PROBING"
-
-    prepared = prepared[prepared["text"].str.strip().str.len() > 0].reset_index(drop=True)
-
-    missing_labels = [label for label in INTENT_LABELS if label not in set(prepared["intent"])]
-    if missing_labels:
-        seed_rows = pd.DataFrame(
-            {
-                "text": [
-                    "We are expanding capacity and seeing strong demand.",
-                    "Margins face pressure due to rising costs.",
-                    "Could you clarify your guidance assumptions?",
-                    "We will provide a routine operational update.",
-                ],
-                "intent": INTENT_LABELS,
-                "speaker": ["CEO", "CFO", "ANALYST", "EXECUTIVE"],
-            }
-        )
-        prepared = pd.concat([prepared, seed_rows], ignore_index=True)
-
-    return prepared
-
-
-class IntentTextDataset(Dataset):
-
-    def __init__(self, frame: pd.DataFrame, tokenizer, max_length: int = 128):
-        self.labels = [INTENT_TO_INDEX[intent] for intent in frame["intent"].tolist()]
-        encoded = tokenizer(
-            frame["text"].astype(str).tolist(),
+    def _tokenize_batch(batch):
+        return tokenizer(
+            batch["text"],
             truncation=True,
             padding="max_length",
             max_length=max_length,
-            return_tensors="pt",
         )
-        self.input_ids = encoded["input_ids"]
-        self.attention_mask = encoded["attention_mask"]
 
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, index):
-        return {
-            "input_ids": self.input_ids[index],
-            "attention_mask": self.attention_mask[index],
-            "labels": torch.tensor(self.labels[index], dtype=torch.long),
-        }
+    tokenized = dataset.map(_tokenize_batch, batched=True)
+    tokenized = tokenized.rename_column("label", "labels")
+    tokenized = tokenized.remove_columns(["text"])
+    tokenized.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+    return tokenized
 
 
 class FinBERTIntentModel:
@@ -240,23 +237,24 @@ def train_finbert_intent_model(
     epochs: int = 3,
     learning_rate: float = 2e-5,
 ):
-    resolved_dataset_path = _resolve_dataset_path(dataset_path)
-    if not resolved_dataset_path.exists():
-        raise FileNotFoundError(f"Dataset not found: {resolved_dataset_path}")
-
     output_dir = _resolve_output_dir(output_path)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Loading training dataset: {resolved_dataset_path}")
-    frame = pd.read_csv(resolved_dataset_path)
-    train_frame = _prepare_training_frame(frame)
+    resolved_dataset_path = _resolve_dataset_path(dataset_path)
+    print(f"Loading evaluation dataset source: {resolved_dataset_path}")
+    eval_frame = load_evaluation_dataset(dataset_path=resolved_dataset_path)
+    train_frame = _build_intent_frame_from_eval(eval_frame)
+    train_frame = _balance_intent_frame(train_frame, random_state=42)
 
-    class_counts = train_frame["intent"].value_counts().to_dict()
+    if train_frame.empty:
+        raise ValueError("Training dataset is empty after mapping and balancing.")
+
+    class_counts = train_frame["intent"].value_counts().reindex(INTENT_LABELS, fill_value=0).to_dict()
     print(f"Prepared training rows: {len(train_frame)}")
-    print(f"Class distribution: {class_counts}")
+    print(f"Training class distribution: {class_counts}")
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    train_dataset = IntentTextDataset(train_frame, tokenizer=tokenizer, max_length=max_length)
+    train_dataset = _build_hf_train_dataset(train_frame, tokenizer=tokenizer, max_length=max_length)
 
     model = AutoModelForSequenceClassification.from_pretrained(
         MODEL_NAME,
