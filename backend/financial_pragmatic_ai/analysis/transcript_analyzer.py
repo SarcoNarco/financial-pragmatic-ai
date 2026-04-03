@@ -72,7 +72,18 @@ class TranscriptAnalyzer:
 
         try:
             self.intent_model = FinBERTIntentModel(device=device)
-            self.intent_model.load_weights(FINBERT_INTENT_PATH)
+            loaded = self.intent_model.load_weights(FINBERT_INTENT_PATH)
+            if not loaded:
+                print(
+                    f"[WARN] FinBERT intent checkpoint not found at {FINBERT_INTENT_PATH}. "
+                    "Falling back to pragmatic transformer."
+                )
+                self.intent_model = None
+            else:
+                print(f"[INFO] Loaded FinBERT intent weights from: {FINBERT_INTENT_PATH}")
+        except RuntimeError as exc:
+            print(f"[ERROR] FinBERT intent classifier load failed: {exc}")
+            raise
         except Exception as exc:
             print(f"[WARN] FinBERT intent model unavailable: {exc}")
             self.intent_model = None
@@ -150,13 +161,7 @@ class TranscriptAnalyzer:
         for seg in segments:
             prediction = self.predict_intent(seg["text"], seg["speaker"])
             intent = prediction["intent"]
-            text_lower = seg["text"].lower()
-
             print("MODEL INTENT:", intent)  # DEBUG
-
-            # TEMP: DISABLE HEURISTIC OVERRIDE
-            # if intent in ["GENERAL_UPDATE", "EXECUTIVE"]:
-            #     ...
 
             results.append({
                 "speaker": seg["speaker"],

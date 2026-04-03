@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import io
 import json
-from contextlib import redirect_stdout
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List
 
@@ -251,6 +250,16 @@ def run_evaluation(
     y_pred_finbert = baseline["signals"]
     y_pred_ours = [item["signal"] for item in ours]
     confidence_ours = [item["confidence"] for item in ours]
+
+    finbert_distribution = Counter(y_pred_finbert)
+    our_distribution = Counter(y_pred_ours)
+    print(f"FinBERT prediction distribution: {dict(finbert_distribution)}")
+    print(f"Our system prediction distribution: {dict(our_distribution)}")
+
+    if y_pred_ours:
+        dominant_share = max(our_distribution.values()) / len(y_pred_ours)
+        if dominant_share > 0.80:
+            print("[ERROR] Model collapse detected")
 
     finbert_metrics = compute_metrics(y_true=y_true, y_pred=y_pred_finbert, labels=SIGNAL_LABELS)
     our_metrics = compute_metrics(y_true=y_true, y_pred=y_pred_ours, labels=SIGNAL_LABELS)
