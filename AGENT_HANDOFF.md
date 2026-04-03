@@ -326,3 +326,91 @@ URLs:
 - Keep changes modular: model loading, parser, and API aggregation are separate concerns.
 - If reducing log noise, remove temporary debug prints only after validating intent/signal distributions.
 - Preserve `/analyze` response schema to avoid frontend breakage.
+
+---
+
+## 13. CURRENT STATE UPDATE (2026-04-04)
+
+### PROJECT OVERVIEW
+- Financial NLP system for earnings-call analysis and signal extraction.
+- FastAPI backend + React frontend.
+- MongoDB and authentication are removed for now (stateless runtime).
+- FinBERT-based custom fine-tuned intent model is active.
+- Conversation pipeline: transcript -> intents -> scoring -> signal.
+
+### CURRENT ARCHITECTURE
+- FinBERT encoder: `yiyanghkust/finbert-tone`.
+- Custom classifier head with 4 classes:
+  - `EXPANSION`
+  - `COST_PRESSURE`
+  - `STRATEGIC_PROBING`
+  - `GENERAL_UPDATE`
+- `TranscriptAnalyzer` core methods:
+  - `predict_intent()`
+  - `analyze()`
+- Signal pipeline:
+  - `compute_risk_score()`
+  - `derive_signal()`
+
+### TRAINING (V2)
+- HuggingFace `Trainer` is used.
+- Dataset is built from the evaluation dataset source:
+  - `growth -> EXPANSION`
+  - `risk -> COST_PRESSURE`
+  - `neutral -> GENERAL_UPDATE`
+  - `STRATEGIC_PROBING` via question/analyst-prompt heuristic.
+- Balanced dataset is used before training.
+- Training config:
+  - `epochs = 3`
+  - `lr = 2e-5`
+  - `batch_size = 16`
+- Model is saved with:
+  - `save_pretrained("models/finbert_intent_v2")`
+
+### CURRENT MODEL STATUS
+- Model is trained and loaded from pretrained directory format.
+- `num_labels = 4` is active at runtime.
+- No classifier head mismatch in inference path.
+- No single-class model collapse in current reported evaluation.
+
+### EVALUATION SETUP
+- Balanced sample with `per_class_target = 80`.
+- Pipeline:
+  - `text -> intent -> segments -> score -> signal`
+
+### LATEST RESULTS (IMPORTANT)
+FinBERT:
+- Accuracy: `0.5042`
+- F1: `0.4524`
+
+Our System:
+- Accuracy: `0.8667`
+- F1: `0.8695`
+
+Improvement:
+- Delta Accuracy: `+0.3625`
+- Delta F1: `+0.4171`
+
+Prediction distribution:
+- growth: `69`
+- neutral: `112`
+- risk: `59`
+
+### KNOWN ISSUES / RISKS
+- Potential data leakage risk: current training dataset is derived from evaluation dataset source.
+- `STRATEGIC_PROBING` impact on final signal remains weak.
+- Conversation attention model training is not active in runtime path yet; fallback logic is still used.
+- Evaluation sample size is relatively small (`240`).
+
+### NEXT PRIORITIES
+1. Validate with a proper train/test split (no leakage).
+2. Improve `STRATEGIC_PROBING` weight in scoring.
+3. Train and integrate `conversation_attention` model.
+4. Improve dataset quality/coverage.
+5. Prepare deployment phase after robustness validation.
+
+### IMPORTANT NOTES FOR NEXT AGENT
+- Do not retrain blindly; verify data split integrity first.
+- Do not modify working pipeline unless necessary.
+- Focus on validation and robustness before adding new complexity.
+- System is working; optimize and harden rather than rebuild.
