@@ -5,7 +5,7 @@ INTENT_TO_SIGNAL = {
     "EXPANSION": "growth",
     "STRONG_GROWTH": "growth",
     "GENERAL_UPDATE": "neutral",
-    "STRATEGIC_PROBING": "risk",
+    "STRATEGIC_PROBING": "neutral",
     "COST_PRESSURE": "risk",
     "RISK": "risk",
 }

@@ -29,11 +29,22 @@ INTENT_LABELS = [
     "EXPANSION",
     "COST_PRESSURE",
     "STRATEGIC_PROBING",
+    "GENERAL_UPDATE",
 ]
 INTENT_TO_INDEX = {label: idx for idx, label in enumerate(INTENT_LABELS)}
 INDEX_TO_INTENT = {idx: label for label, idx in INTENT_TO_INDEX.items()}
-LABEL2ID = {label: idx for idx, label in enumerate(INTENT_LABELS)}
-ID2LABEL = {idx: label for label, idx in LABEL2ID.items()}
+LABEL2ID = {
+    "EXPANSION": 0,
+    "COST_PRESSURE": 1,
+    "STRATEGIC_PROBING": 2,
+    "GENERAL_UPDATE": 3,
+}
+ID2LABEL = {
+    0: "EXPANSION",
+    1: "COST_PRESSURE",
+    2: "STRATEGIC_PROBING",
+    3: "GENERAL_UPDATE",
+}
 
 DEFAULT_DATASET_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "conversation_dataset.csv"
@@ -87,7 +98,7 @@ class FinBERTIntentModel:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(
             model_name,
-            num_labels=3,
+            num_labels=4,
             id2label=ID2LABEL,
             label2id=LABEL2ID,
             ignore_mismatched_sizes=True,
@@ -97,17 +108,14 @@ class FinBERTIntentModel:
         self.model.classifier = nn.Sequential(
             nn.Linear(hidden_size, 256),
             nn.ReLU(),
-            nn.Linear(256, 3),
+            nn.Linear(256, 4),
         )
         self.classifier = self.model.classifier
         self.model = self.model.float()
         self.model.classifier = self.model.classifier.float()
         self.model.to(self.encoder_device)
         self.model.classifier.to(self.device)
-        print(
-            "[FinBERTIntentModel] classifier weight shape:",
-            tuple(self.model.classifier[2].weight.shape),
-        )
+        print("Classifier shape:", self.model.classifier[2].weight.shape)
         self.model.eval()
         for param in self.model.bert.parameters():
             param.requires_grad = False
@@ -142,10 +150,7 @@ class FinBERTIntentModel:
 
         print(f"[FinBERTIntentModel] missing_keys: {missing_keys}")
         print(f"[FinBERTIntentModel] unexpected_keys: {unexpected_keys}")
-        print(
-            "[FinBERTIntentModel] loaded classifier weight shape:",
-            tuple(self.model.classifier[2].weight.shape),
-        )
+        print("Classifier shape:", self.model.classifier[2].weight.shape)
         if missing_keys or unexpected_keys:
             raise RuntimeError(
                 "Classifier/model checkpoint mismatch detected. "
