@@ -250,7 +250,7 @@ class TranscriptAnalyzer:
         )
         return {
             "intent": intent,
-            "logits": torch.zeros(4, dtype=torch.float32),
+            "logits": torch.zeros(3, dtype=torch.float32),
             "embedding": fallback_embedding,
         }
 

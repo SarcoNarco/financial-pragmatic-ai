@@ -8,7 +8,7 @@ import torch
 from torch import nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoTokenizer, BertForSequenceClassification
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 # Let PyTorch use all available CPU cores for BERT inference
 # (torch.set_num_threads(2) was here — removed because it throttled
@@ -29,10 +29,11 @@ INTENT_LABELS = [
     "EXPANSION",
     "COST_PRESSURE",
     "STRATEGIC_PROBING",
-    "GENERAL_UPDATE",
 ]
 INTENT_TO_INDEX = {label: idx for idx, label in enumerate(INTENT_LABELS)}
 INDEX_TO_INTENT = {idx: label for label, idx in INTENT_TO_INDEX.items()}
+LABEL2ID = {label: idx for idx, label in enumerate(INTENT_LABELS)}
+ID2LABEL = {idx: label for label, idx in LABEL2ID.items()}
 
 DEFAULT_DATASET_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "conversation_dataset.csv"
@@ -84,9 +85,11 @@ class FinBERTIntentModel:
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.encoder_device = self.device
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = BertForSequenceClassification.from_pretrained(
+        self.model = AutoModelForSequenceClassification.from_pretrained(
             model_name,
-            num_labels=len(INTENT_LABELS),
+            num_labels=3,
+            id2label=ID2LABEL,
+            label2id=LABEL2ID,
             ignore_mismatched_sizes=True,
             attn_implementation="eager",  # Disable SDPA to prevent kernel dispatch hang on Colab
         )
@@ -94,13 +97,17 @@ class FinBERTIntentModel:
         self.model.classifier = nn.Sequential(
             nn.Linear(hidden_size, 256),
             nn.ReLU(),
-            nn.Linear(256, len(INTENT_LABELS)),
+            nn.Linear(256, 3),
         )
         self.classifier = self.model.classifier
         self.model = self.model.float()
         self.model.classifier = self.model.classifier.float()
         self.model.to(self.encoder_device)
         self.model.classifier.to(self.device)
+        print(
+            "[FinBERTIntentModel] classifier weight shape:",
+            tuple(self.model.classifier[2].weight.shape),
+        )
         self.model.eval()
         for param in self.model.bert.parameters():
             param.requires_grad = False
@@ -123,25 +130,27 @@ class FinBERTIntentModel:
                     "Classifier weights missing in finbert_intent checkpoint: "
                     f"{missing_classifier_keys}"
                 )
-            missing_keys, unexpected_keys = self.model.classifier.load_state_dict(
-                classifier_state,
-                strict=False,
-            )
-        elif isinstance(state, dict):
-            load_info = self.model.load_state_dict(state, strict=False)
+            load_info = self.model.classifier.load_state_dict(classifier_state, strict=True)
             missing_keys = list(load_info.missing_keys)
             unexpected_keys = list(load_info.unexpected_keys)
-            missing_classifier = [key for key in missing_keys if key.startswith("classifier")]
-            if missing_classifier:
-                raise RuntimeError(
-                    "Classifier weights were not loaded into model classifier head: "
-                    f"{missing_classifier}"
-                )
+        elif isinstance(state, dict):
+            load_info = self.model.load_state_dict(state, strict=True)
+            missing_keys = list(load_info.missing_keys)
+            unexpected_keys = list(load_info.unexpected_keys)
         else:
             return False
 
         print(f"[FinBERTIntentModel] missing_keys: {missing_keys}")
         print(f"[FinBERTIntentModel] unexpected_keys: {unexpected_keys}")
+        print(
+            "[FinBERTIntentModel] loaded classifier weight shape:",
+            tuple(self.model.classifier[2].weight.shape),
+        )
+        if missing_keys or unexpected_keys:
+            raise RuntimeError(
+                "Classifier/model checkpoint mismatch detected. "
+                f"missing_keys={missing_keys}, unexpected_keys={unexpected_keys}"
+            )
         self.model.eval()
         self.model.classifier.eval()
         return True
@@ -207,7 +216,7 @@ def train_finbert_intent_model(
         raise ValueError("Dataset must include 'text' and 'intent' columns")
 
     frame["text"] = frame["text"].fillna("").astype(str)
-    frame["intent"] = frame["intent"].fillna("GENERAL_UPDATE").astype(str).str.upper()
+    frame["intent"] = frame["intent"].fillna("").astype(str).str.upper()
     frame = frame[frame["intent"].isin(INTENT_LABELS)].reset_index(drop=True)
     if max_samples is not None and len(frame) > max_samples:
         frame = frame.sample(n=max_samples, random_state=42).reset_index(drop=True)
