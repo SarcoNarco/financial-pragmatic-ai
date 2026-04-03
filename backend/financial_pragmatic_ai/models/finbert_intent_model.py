@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import re
+import string
 from pathlib import Path
 
 import pandas as pd
@@ -12,10 +14,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-from financial_pragmatic_ai.evaluation.better_than_fin.utils import (
-    build_ground_truth_signals,
-    load_evaluation_dataset,
-)
+from financial_pragmatic_ai.evaluation.better_than_fin.utils import build_ground_truth_signals
 
 
 MODEL_NAME = "yiyanghkust/finbert-tone"
@@ -59,6 +58,15 @@ _PROBING_START_PATTERN = re.compile(
     r"^\s*(?:can you|what is|how|could you)\b",
     re.IGNORECASE,
 )
+_TRANSCRIPT_ID_COLUMNS = (
+    "transcript_id",
+    "call_id",
+    "conversation_id",
+    "document_id",
+    "doc_id",
+    "transcript",
+    "transcript_text",
+)
 
 
 def _resolve_output_dir(output_path: Path | str | None) -> Path:
@@ -77,30 +85,116 @@ def _resolve_dataset_path(dataset_path: Path | str | None) -> Path:
     return Path(dataset_path)
 
 
-def _build_intent_frame_from_eval(frame: pd.DataFrame) -> pd.DataFrame:
-    prepared = frame.copy()
-    prepared["text"] = prepared["text"].fillna("").astype(str)
-    if "speaker" in prepared.columns:
-        prepared["speaker"] = prepared["speaker"].fillna("EXECUTIVE").astype(str).str.upper()
+def _normalize_for_hash(text: str) -> str:
+    normalized = str(text or "").lower()
+    normalized = normalized.translate(str.maketrans({char: " " for char in string.punctuation}))
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
+
+
+def _text_hash(text: str) -> str:
+    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
+
+
+def load_raw_dataset(dataset_path: Path | str | None = None) -> pd.DataFrame:
+    resolved_dataset_path = _resolve_dataset_path(dataset_path)
+    if not resolved_dataset_path.exists():
+        raise FileNotFoundError(f"Dataset not found: {resolved_dataset_path}")
+
+    raw = pd.read_csv(resolved_dataset_path)
+    rename_map = {column: column.strip().lower() for column in raw.columns}
+    raw = raw.rename(columns=rename_map)
+
+    if "text" not in raw.columns:
+        raise ValueError("Dataset must include 'text' column")
+    if "intent" not in raw.columns and "signal" not in raw.columns:
+        raise ValueError("Dataset must include either 'intent' or 'signal' column")
+
+    label_source_col = "intent" if "intent" in raw.columns else "signal"
+
+    transcript_id_col = None
+    for candidate in _TRANSCRIPT_ID_COLUMNS:
+        if candidate in raw.columns:
+            transcript_id_col = candidate
+            break
+
+    dataset = pd.DataFrame(
+        {
+            "text": raw["text"].fillna("").astype(str),
+            "speaker": raw["speaker"].fillna("EXECUTIVE").astype(str).str.upper()
+            if "speaker" in raw.columns
+            else "EXECUTIVE",
+            "source_label": raw[label_source_col].fillna("GENERAL_UPDATE").astype(str).str.upper(),
+        }
+    )
+
+    if transcript_id_col is not None:
+        dataset["transcript_id"] = raw[transcript_id_col].fillna("").astype(str)
     else:
-        prepared["speaker"] = "EXECUTIVE"
-    prepared["intent"] = prepared["intent"].fillna("GENERAL_UPDATE").astype(str).str.upper()
+        # Assumption fallback when transcript IDs are unavailable in the source dataset.
+        dataset["transcript_id"] = dataset["text"].map(_normalize_for_hash)
 
-    prepared = prepared[prepared["text"].str.strip().str.len() > 0].reset_index(drop=True)
-    if prepared.empty:
-        raise ValueError("Evaluation dataset is empty after text cleaning.")
+    dataset = dataset[dataset["text"].str.strip().str.len() > 0].reset_index(drop=True)
+    if dataset.empty:
+        raise ValueError("Raw dataset is empty after cleaning text.")
+    return dataset
 
-    signals = build_ground_truth_signals(prepared["intent"].tolist())
-    mapped_intent = [_SIGNAL_TO_INTENT[signal.upper()] for signal in signals]
-    prepared["mapped_intent"] = mapped_intent
+
+def split_dataset_transcript_level(dataset: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    if dataset.empty:
+        raise ValueError("Cannot split empty dataset.")
+
+    transcript_table = dataset[["transcript_id"]].drop_duplicates().copy()
+    transcript_table["split"] = transcript_table["transcript_id"].map(
+        lambda value: "train" if int(_text_hash(value), 16) % 100 < 80 else "eval"
+    )
+
+    merged = dataset.merge(transcript_table, on="transcript_id", how="left")
+    train_raw = merged[merged["split"] == "train"].copy().reset_index(drop=True)
+    eval_raw = merged[merged["split"] == "eval"].copy().reset_index(drop=True)
+
+    if train_raw.empty or eval_raw.empty:
+        raise ValueError(
+            "Transcript-level split produced an empty split. "
+            f"train_rows={len(train_raw)} eval_rows={len(eval_raw)}"
+        )
+
+    train_hashes = set(train_raw["text"].map(_normalize_for_hash).map(_text_hash))
+    eval_hashes = set(eval_raw["text"].map(_normalize_for_hash).map(_text_hash))
+    duplicate_hashes = train_hashes & eval_hashes
+    if duplicate_hashes:
+        print(
+            "[WARNING] Duplicate normalized segment texts detected across train/eval splits: "
+            f"{len(duplicate_hashes)}"
+        )
+
+    return {
+        "train_raw": train_raw,
+        "eval_raw": eval_raw,
+        "duplicate_hashes": pd.DataFrame({"hash": list(duplicate_hashes)}),
+    }
+
+
+def _apply_intent_mapping(frame: pd.DataFrame) -> pd.DataFrame:
+    prepared = frame.copy()
+    signals = build_ground_truth_signals(prepared["source_label"].tolist())
+    prepared["intent"] = [_SIGNAL_TO_INTENT[signal.upper()] for signal in signals]
 
     question_mask = prepared["text"].str.contains(_ANALYST_QUESTION_PATTERN, regex=True)
     starter_mask = prepared["text"].str.contains(_PROBING_START_PATTERN, regex=True)
     probing_mask = question_mask | starter_mask
+    prepared.loc[probing_mask, "intent"] = "STRATEGIC_PROBING"
 
-    prepared.loc[probing_mask, "mapped_intent"] = "STRATEGIC_PROBING"
+    return prepared[["text", "speaker", "transcript_id", "intent"]]
 
-    return prepared[["text", "mapped_intent"]].rename(columns={"mapped_intent": "intent"})
+
+def build_train_set(split_data: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    mapped_train = _apply_intent_mapping(split_data["train_raw"])
+    return _balance_intent_frame(mapped_train, random_state=42)
+
+
+def build_eval_set(split_data: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    return _apply_intent_mapping(split_data["eval_raw"])
 
 
 def _balance_intent_frame(frame: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
@@ -242,20 +336,33 @@ def train_finbert_intent_model(
 
     resolved_dataset_path = _resolve_dataset_path(dataset_path)
     print(f"Loading evaluation dataset source: {resolved_dataset_path}")
-    eval_frame = load_evaluation_dataset(dataset_path=resolved_dataset_path)
-    train_frame = _build_intent_frame_from_eval(eval_frame)
-    train_frame = _balance_intent_frame(train_frame, random_state=42)
+    raw_dataset = load_raw_dataset(dataset_path=resolved_dataset_path)
+    split_data = split_dataset_transcript_level(raw_dataset)
+    train_frame = build_train_set(split_data)
+    eval_frame = build_eval_set(split_data)
 
     if train_frame.empty:
         raise ValueError("Training dataset is empty after mapping and balancing.")
+    if eval_frame.empty:
+        raise ValueError("Evaluation dataset is empty after transcript-level split.")
 
+    print(
+        f"Train transcripts: {split_data['train_raw']['transcript_id'].nunique()} | "
+        f"Eval transcripts: {split_data['eval_raw']['transcript_id'].nunique()}"
+    )
+    print(
+        f"Train segments: {len(split_data['train_raw'])} | "
+        f"Eval segments: {len(split_data['eval_raw'])}"
+    )
     class_counts = train_frame["intent"].value_counts().reindex(INTENT_LABELS, fill_value=0).to_dict()
-    print(f"Prepared training rows: {len(train_frame)}")
+    eval_counts = eval_frame["intent"].value_counts().reindex(INTENT_LABELS, fill_value=0).to_dict()
+    print(f"Prepared training rows (balanced): {len(train_frame)}")
     print(f"Training class distribution: {class_counts}")
+    print(f"Evaluation class distribution: {eval_counts}")
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     train_dataset = _build_hf_train_dataset(train_frame, tokenizer=tokenizer, max_length=max_length)
-    eval_dataset = train_dataset
+    eval_dataset = _build_hf_train_dataset(eval_frame, tokenizer=tokenizer, max_length=max_length)
 
     model = AutoModelForSequenceClassification.from_pretrained(
         MODEL_NAME,
