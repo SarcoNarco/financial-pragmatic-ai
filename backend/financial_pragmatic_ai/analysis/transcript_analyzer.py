@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+from collections import Counter
 
 import torch
 
@@ -227,12 +228,15 @@ class TranscriptAnalyzer:
     def predict_intent(self, text, speaker):
         if self.intent_model is not None:
             output = self.intent_model.predict(text)
+            confidence = float(output.get("confidence", 0.0))
+            intent = output["intent"] if confidence >= 0.4 else "GENERAL_UPDATE"
             cls_embedding = output["embedding"].float()
             final_embedding = torch.cat([cls_embedding, _speaker_vector(speaker)], dim=-1)
             return {
-                "intent": output["intent"],
+                "intent": intent,
                 "logits": output["logits"],
                 "embedding": final_embedding,
+                "confidence": confidence,
             }
 
         if self.fallback_intent_model is not None:
@@ -252,6 +256,7 @@ class TranscriptAnalyzer:
             "intent": intent,
             "logits": torch.zeros(4, dtype=torch.float32),
             "embedding": fallback_embedding,
+            "confidence": 1.0,
         }
 
     def predict_conversation_signal(self, intents):
@@ -294,5 +299,7 @@ class TranscriptAnalyzer:
         print("[DEBUG] SAMPLE OUTPUT:")
         for result in results[:5]:
             print(result)
+        intent_distribution = Counter(result["intent"] for result in results)
+        print("[DEBUG] Intent distribution:", dict(intent_distribution))
 
         return results

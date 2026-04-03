@@ -3,19 +3,15 @@ import statistics
 
 INTENT_TO_SIGNAL = {
     "EXPANSION": "growth",
-    "STRONG_GROWTH": "growth",
     "GENERAL_UPDATE": "neutral",
     "STRATEGIC_PROBING": "neutral",
     "COST_PRESSURE": "risk",
-    "RISK": "risk",
 }
 
 SIGNAL_TO_VALUE = {"growth": -1.0, "neutral": 0.0, "risk": 1.0}
 INTENT_TO_SCORE = {
     "EXPANSION": 1.0,
-    "STRONG_GROWTH": 1.0,
     "COST_PRESSURE": -1.0,
-    "RISK": -1.0,
     "GENERAL_UPDATE": 0.0,
     "STRATEGIC_PROBING": 0.0,
 }
@@ -42,9 +38,9 @@ def compute_risk_score(intents):
 
 
 def derive_signal(score):
-    if score > 0.2:
+    if score > 0.3:
         signal = "growth"
-    elif score < -0.2:
+    elif score < -0.3:
         signal = "risk"
     else:
         signal = "neutral"
@@ -159,3 +155,12 @@ def compute_intent_distribution(intents):
         return {key: 0.0 for key in counts}
 
     return {key: round((value / total) * 100, 2) for key, value in counts.items()}
+
+
+def compute_signal_distribution(intents):
+    counts = {"growth": 0, "neutral": 0, "risk": 0}
+    for item in intents:
+        intent = str(item.get("intent", "GENERAL_UPDATE")).upper()
+        signal = INTENT_TO_SIGNAL.get(intent, "neutral")
+        counts[signal] += 1
+    return counts

@@ -6,6 +6,7 @@ from financial_pragmatic_ai.analysis.financial_signal_engine import (
     compute_confidence,
     compute_intent_distribution,
     compute_risk_score,
+    compute_signal_distribution,
     compute_signal_std,
     detect_volatility,
     derive_signal,
@@ -35,19 +36,14 @@ def _run_analysis(transcript: str):
         return {"error": "Could not parse transcript"}
 
     score = compute_risk_score(results)
-    signal = result["aggregation"]["dominant_signal"]
-    if signal == "risk":
-        score = max(score, 65)
-    elif signal == "growth":
-        score = min(score, 35)
-    else:
-        score = min(max(score, 36), 64)
-
     signal = derive_signal(score)
     confidence = compute_confidence(results)
     volatility = detect_volatility(results)
     volatility_std = round(compute_signal_std(results), 4)
     intent_distribution = compute_intent_distribution(results)
+    signal_distribution = compute_signal_distribution(results)
+    print("[DEBUG] intent distribution:", intent_distribution)
+    print("[DEBUG] signal distribution:", signal_distribution)
     market = predict_market_outlook(
         signal=signal,
         risk_score=score,
