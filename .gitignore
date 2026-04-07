@@ -10,8 +10,12 @@ venv/
 
 .ipynb_checkpoints/
 
-models/*.pt
-models/*.bin
+# Model weights — loaded from HuggingFace Hub, never committed to git
+# Primary:  SarcoNarco/finbert_intent_v3
+# Fallback: SarcoNarco/financial-models
+**/*.pt
+**/*.bin
+**/*.safetensors
 
 data/*.csv
 data/*.jsonl
@@ -20,8 +24,6 @@ data/archive*
 *.log
 *.db
 
-financial_pragmatic_ai/models/*.pt
-financial_pragmatic_ai/models/*.bin
 financial_pragmatic_ai/data/*.csv
 financial_pragmatic_ai/data/*.jsonl
 financial_pragmatic_ai/data/archive*

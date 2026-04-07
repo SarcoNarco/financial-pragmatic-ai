@@ -5,3 +5,4 @@ torch
 transformers
 datasets
 pdfplumber
+huggingface_hub

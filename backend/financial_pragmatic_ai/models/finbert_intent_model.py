@@ -18,6 +18,7 @@ from financial_pragmatic_ai.evaluation.better_than_fin.utils import build_ground
 
 
 MODEL_NAME = "yiyanghkust/finbert-tone"
+HF_INTENT_REPO = "SarcoNarco/finbert_intent_v3"
 INTENT_LABELS = [
     "EXPANSION",
     "COST_PRESSURE",
@@ -278,6 +279,11 @@ def _build_hf_train_dataset(frame: pd.DataFrame, tokenizer, max_length: int = 12
     return tokenized
 
 
+# ---------------------------------------------------------------------------
+# Models are loaded from HuggingFace Hub.
+# No local model files required.
+# Primary repo: SarcoNarco/finbert_intent_v3
+# ---------------------------------------------------------------------------
 class FinBERTIntentModel:
 
     def __init__(
@@ -287,26 +293,17 @@ class FinBERTIntentModel:
         device: torch.device | None = None,
     ):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        candidate_dir = Path(model_dir) if model_dir is not None else DEFAULT_MODEL_DIR
-
-        if candidate_dir.exists() and (candidate_dir / "config.json").exists():
-            source = str(candidate_dir)
-            self.tokenizer = AutoTokenizer.from_pretrained(source)
-            self.model = AutoModelForSequenceClassification.from_pretrained(source)
-        else:
-            source = model_name
-            self.tokenizer = AutoTokenizer.from_pretrained(source)
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                source,
-                num_labels=4,
-                id2label=ID2LABEL,
-                label2id=LABEL2ID,
-                ignore_mismatched_sizes=True,
-            )
+        print(f"[INFO] Loading FinBERT intent model from HuggingFace: {HF_INTENT_REPO}")
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(HF_INTENT_REPO)
+            self.model = AutoModelForSequenceClassification.from_pretrained(HF_INTENT_REPO)
+        except Exception as exc:
+            print(f"[ERROR] Failed to load FinBERT intent model from HuggingFace: {exc}")
+            raise
 
         self.model.to(self.device)
         self.model.eval()
-        print(f"Loaded FinBERT intent model num_labels={self.model.config.num_labels}")
+        print(f"[INFO] Loaded FinBERT intent model num_labels={self.model.config.num_labels}")
 
     def save_pretrained(self, output_dir: Path | str = DEFAULT_MODEL_DIR):
         target = Path(output_dir)
