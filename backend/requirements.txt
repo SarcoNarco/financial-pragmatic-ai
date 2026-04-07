@@ -1,6 +1,6 @@
 fastapi
 uvicorn
 transformers
-torch==2.2.2
+torch
 huggingface_hub
 numpy
