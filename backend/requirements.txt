@@ -1,8 +1,6 @@
 fastapi
 uvicorn
-pydantic
-torch
 transformers
-datasets
-pdfplumber
+torch==2.2.2
 huggingface_hub
+numpy

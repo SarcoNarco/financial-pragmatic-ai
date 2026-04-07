@@ -1,3 +1,6 @@
+import os
+os.environ.setdefault("HF_HOME", "/tmp/hf_cache")
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from api.schemas import CompareRequest, TranscriptRequest
@@ -26,10 +29,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-analyzer = EarningsCallAnalyzer()
+analyzer = None
 
 
 def _run_analysis(transcript: str):
+    global analyzer
+    if analyzer is None:
+        analyzer = EarningsCallAnalyzer()
+
     result = analyzer.analyze(transcript)
     segments = result["segments"]
     if len(segments) == 0:
