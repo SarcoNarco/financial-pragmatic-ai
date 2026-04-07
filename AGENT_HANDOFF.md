@@ -414,3 +414,17 @@ Prediction distribution:
 - Do not modify working pipeline unless necessary.
 - Focus on validation and robustness before adding new complexity.
 - System is working; optimize and harden rather than rebuild.
+
+## CURRENT STATE (UPDATED)
+
+- End-to-end pipeline WORKING
+- Frontend fully connected to backend
+- Distribution + drivers now visible
+- Glass UI implemented
+- Tabs + sidebar working
+
+## KNOWN ISSUES
+
+- Driver extraction is raw (needs cleaning/summarization)
+- Signal calibration may need tuning
+- No auth / persistence yet

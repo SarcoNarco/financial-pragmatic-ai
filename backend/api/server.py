@@ -20,7 +20,7 @@ app = FastAPI(title="Financial Pragmatic AI API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,17 +31,20 @@ analyzer = EarningsCallAnalyzer()
 
 def _run_analysis(transcript: str):
     result = analyzer.analyze(transcript)
-    results = result["segments"]
-    if len(results) == 0:
+    segments = result["segments"]
+    if len(segments) == 0:
         return {"error": "Could not parse transcript"}
 
-    score = compute_risk_score(results)
+    # --- Raw driver extraction removed ---
+    # Path B (insight_engine.extract_key_drivers) is the single source of truth.
+
+    score = compute_risk_score(segments)
     signal = derive_signal(score)
-    confidence = compute_confidence(results)
-    volatility = detect_volatility(results)
-    volatility_std = round(compute_signal_std(results), 4)
-    intent_distribution = compute_intent_distribution(results)
-    signal_distribution = compute_signal_distribution(results)
+    confidence = compute_confidence(segments)
+    volatility = detect_volatility(segments)
+    volatility_std = round(compute_signal_std(segments), 4)
+    intent_distribution = compute_intent_distribution(segments)
+    signal_distribution = compute_signal_distribution(segments)
     print("[DEBUG] intent distribution:", intent_distribution)
     print("[DEBUG] signal distribution:", signal_distribution)
     market = predict_market_outlook(
@@ -50,8 +53,28 @@ def _run_analysis(transcript: str):
         volatility=volatility,
         intent_distribution=intent_distribution,
     )
-    insight = generate_insight(score, results)
-    drivers = extract_key_drivers(results)
+    insight = generate_insight(score, segments)
+    drivers = extract_key_drivers(segments)
+
+    print("CLEAN GROWTH DRIVERS:", drivers["growth_drivers"])
+    print("CLEAN RISK DRIVERS:", drivers["risk_drivers"])
+
+    _INTENT_VALUE = {
+        "EXPANSION": 1,
+        "COST_PRESSURE": -1,
+        "GENERAL_UPDATE": 0,
+        "STRATEGIC_PROBING": 0,
+    }
+    timeline = [
+        {
+            "step": i,
+            "value": _INTENT_VALUE.get(seg["intent"], 0),
+            "intent": seg["intent"],
+            "label": seg["text"][:60],
+        }
+        for i, seg in enumerate(segments)
+    ]
+    print("TIMELINE LENGTH:", len(timeline))
 
     return {
         "score": score,
@@ -63,8 +86,11 @@ def _run_analysis(transcript: str):
         "volatility_std": volatility_std,
         "intent_distribution": intent_distribution,
         "insight": insight,
-        "segments": results,
+        "segments": segments,
+        "growth_drivers": drivers["growth_drivers"],
+        "risk_drivers": drivers["risk_drivers"],
         "drivers": drivers,
+        "timeline": timeline,
     }
 
 
