@@ -1,125 +1,171 @@
 # AGENT_HANDOFF.md
 
-## 1. PROJECT OVERVIEW
+## 1. Snapshot (Verified)
 
-This is a full-stack financial transcript analysis system.
+- Repository: `NLP_Proj`
+- Branch: `main`
+- Latest commit (checked locally): `77f6785` (`fix torch version for railway`)
+- Date of this handoff update: 2026-04-10
 
-Runtime flow:
-- React frontend sends transcript text or uploaded file to FastAPI.
-- Backend parses speaker segments, predicts intent per segment, aggregates conversation signal, then returns structured analysis.
-- The app is currently **stateless**: no authentication, no DB persistence, no user sessions.
-
-Primary capabilities currently implemented:
-- Transcript parsing for structured and unstructured earnings-call text.
-- Segment intent prediction using a finetuned FinBERT intent head (with fallback model path).
-- Conversation signal derivation (`growth | neutral | risk`).
-- Risk score, confidence, volatility, market prediction, and driver extraction.
-- UI for Analyze and Compare workflows.
+This document reflects the **current code in the repository**. Nothing below is inferred from prior chat context.
 
 ---
 
-## 2. CURRENT SYSTEM ARCHITECTURE
+## 2. Project Overview
 
-### Backend (active)
-- Framework: FastAPI
-- Entry point: `/Users/saroshnadaf/Documents/NLP_Proj/backend/api/server.py`
-- Active endpoints:
-  - `POST /analyze`
-  - `POST /upload`
-  - `POST /compare`
-- No DB/auth modules are used by runtime.
+The project is a financial transcript analysis system.
 
-### Frontend (active)
-- Framework: React
-- Entry point: `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/App.js`
-- Main page: `/Users/saroshnadaf/Documents/NLP_Proj/frontend/src/pages/DashboardPage.js`
-- Tabs active: `Analyze`, `Compare`
+Primary backend flow:
+- Transcript text/file -> parsing + segmentation -> intent prediction per segment -> aggregate score/signal/prediction/drivers -> JSON response.
 
-### End-to-end flow
-`text/file -> /analyze or /upload -> EarningsCallAnalyzer -> TranscriptAnalyzer -> financial_signal_engine + market_predictor + insight_engine -> JSON response -> dashboard render`
+There are **two frontends** in the repo:
+- `frontend/` (CRA): stateless dashboard directly calling backend APIs.
+- `frontend_v2/` (Vite + Tailwind + Supabase): richer UI with auth/history stored in Supabase, while inference still calls backend `/analyze`.
 
 ---
 
-## 3. VERIFIED PROJECT STRUCTURE (CURRENT)
+## 3. Verified Project Structure
 
 ```text
 NLP_Proj/
 ├── AGENT_HANDOFF.md
 ├── README.md
 ├── backend/
-│   ├── requirements.txt
 │   ├── api/
-│   │   ├── server.py
-│   │   └── schemas.py
+│   │   ├── schemas.py
+│   │   └── server.py                    # Active FastAPI entrypoint
+│   ├── requirements.txt
 │   └── financial_pragmatic_ai/
+│       ├── __init__.py
 │       ├── analysis/
-│       │   ├── transcript_parser.py
-│       │   ├── transcript_analyzer.py
+│       │   ├── conversation_vectorizer.py
 │       │   ├── earnings_call_analyzer.py
-│       │   ├── financial_signal_engine.py
-│       │   ├── market_predictor.py
-│       │   ├── insight_engine.py
-│       │   ├── timeline_signal_analyzer.py
-│       │   ├── timeline_builder.py
-│       │   ├── signal_statistics.py
 │       │   ├── financial_insight_generator.py
-│       │   └── conversation_vectorizer.py
-│       ├── models/
-│       │   ├── finbert_intent_model.py
-│       │   ├── conversation_attention_model.py
-│       │   ├── financial_pragmatic_transformer_v2.py
-│       │   ├── financial_pragmatic_transformer.py
-│       │   ├── intent_classifier.py
-│       │   ├── speaker_embedding.py
-│       │   ├── pragmatic_input_layer.py
-│       │   ├── pragmatic_attention.py
-│       │   ├── conversation_interaction_model.py
-│       │   ├── finbert_base.py
-│       │   ├── finbert_intent.pt
-│       │   ├── conversation_signal_model.pt
-│       │   ├── intent_classifier.pt
-│       │   └── pragmatic_transformer_trained.pt
+│       │   ├── financial_signal_engine.py
+│       │   ├── insight_engine.py
+│       │   ├── market_predictor.py
+│       │   ├── signal_statistics.py
+│       │   ├── timeline_builder.py
+│       │   ├── timeline_signal_analyzer.py
+│       │   ├── transcript_analyzer.py
+│       │   └── transcript_parser.py
+│       ├── api/
+│       │   └── server.py                # Legacy second API server module (not uvicorn target)
 │       ├── data/
-│       ├── training/
-│       ├── testing/
-│       ├── evaluation/better_than_fin/
-│       │   ├── evaluate.py
-│       │   ├── metrics.py
-│       │   ├── utils.py
-│       │   └── visualize.py
+│       │   ├── pragmatic_intent_dataset_clean.csv
+│       │   ├── pragmatic_intent_dataset.csv
+│       │   ├── conversation_signal_dataset.csv
+│       │   ├── intent_dataset.csv
+│       │   └── ...
+│       ├── evaluation/
+│       │   └── better_than_fin/
+│       │       ├── evaluate.py
+│       │       ├── metrics.py
+│       │       ├── utils.py
+│       │       ├── visualize.py
+│       │       └── results/
 │       ├── inference/
+│       │   ├── decision_engine.py
+│       │   └── signal_extractor.py
+│       ├── models/
+│       │   ├── conversation_attention_model.py
+│       │   ├── conversation_interaction_model.py
+│       │   ├── financial_pragmatic_transformer.py
+│       │   ├── financial_pragmatic_transformer_v2.py
+│       │   ├── finbert_base.py
+│       │   ├── finbert_intent_model.py
+│       │   ├── intent_classifier.py
+│       │   ├── pragmatic_attention.py
+│       │   ├── pragmatic_input_layer.py
+│       │   └── speaker_embedding.py
+│       ├── testing/
+│       │   ├── evaluate_model.py
+│       │   ├── test_earnings_call_analyzer.py
+│       │   ├── test_trained_model.py
+│       │   └── test_transcript_analyzer.py
+│       ├── training/
+│       │   ├── train_conversation_model.py
+│       │   ├── train_finbert_intent_v2.py
+│       │   ├── train_intent_classifier.py
+│       │   ├── train_pragmatic_transformer.py
+│       │   ├── train_pragmatic_transformwer.py
+│       │   └── train_v2_pipeline.py
 │       └── utils/
-└── frontend/
-    ├── src/
-    │   ├── App.js
-    │   ├── index.js
-    │   ├── index.css
-    │   ├── App.css
-    │   ├── api/client.js
-    │   ├── pages/DashboardPage.js
-    │   └── components/
-    │       ├── SummaryCard.js
-    │       ├── TimelineChart.js
-    │       └── SignalHeatmap.js
-    └── package.json
+├── frontend/                              # CRA frontend
+│   ├── package.json
+│   └── src/
+│       ├── App.js
+│       ├── api/client.js
+│       ├── components/
+│       └── pages/DashboardPage.js
+└── frontend_v2/                           # Vite frontend with Supabase
+    ├── package.json
+    └── src/
+        ├── App.jsx
+        ├── supabaseClient.js
+        └── components/
+            ├── Auth.jsx
+            ├── Compare.jsx
+            ├── Insights.jsx
+            ├── Navbar.jsx
+            ├── Overview.jsx
+            ├── Sidebar.jsx
+            ├── Tabs.jsx
+            └── TimelineChart.jsx
 ```
-
-Removed app-layer files (confirmed absent):
-- `backend/api/auth.py`
-- `backend/api/database.py`
-- `frontend/src/pages/LoginPage.js`
-- `frontend/src/pages/SignupPage.js`
 
 ---
 
-## 4. ACTIVE API CONTRACT
+## 4. Backend Runtime Architecture (Active)
 
-### `POST /analyze`
-Request:
-```json
-{ "transcript": "CEO: ..." }
-```
-Response keys:
+Active entrypoint:
+- `backend/api/server.py`
+
+FastAPI endpoints implemented:
+- `POST /analyze`
+- `POST /upload`
+- `POST /compare`
+
+Request schemas (`backend/api/schemas.py`):
+- `TranscriptRequest`: `{ "transcript": str }`
+- `CompareRequest`: `{ "transcript_1": str, "transcript_2": str }`
+
+CORS in active server:
+- `allow_origins=["*"]`
+- `allow_credentials=True`
+- `allow_methods=["*"]`
+- `allow_headers=["*"]`
+
+No Mongo/JWT/auth usage in active backend routes.
+- No `backend/api/auth.py`
+- No `backend/api/database.py`
+
+---
+
+## 5. Core Inference Flow (Current Code)
+
+`/analyze` -> `_run_analysis(transcript)` in `backend/api/server.py`
+
+1. Instantiate `EarningsCallAnalyzer` lazily.
+2. `EarningsCallAnalyzer.analyze()`:
+   - calls `TranscriptAnalyzer.analyze()` for segments+intents
+   - computes timeline window signals (`TimelineSignalAnalyzer`)
+   - returns `segments`, `timeline_signals`, `aggregation`, `insight`
+3. `_run_analysis` recomputes main outputs from `segments` using:
+   - `compute_risk_score`
+   - `derive_signal`
+   - `compute_confidence`
+   - `detect_volatility`
+   - `compute_signal_std`
+   - `compute_intent_distribution`
+   - `compute_signal_distribution`
+   - `predict_market_outlook`
+   - `generate_insight`
+   - `extract_key_drivers`
+4. Builds timeline points from intents.
+5. Returns response JSON.
+
+Returned keys from `/analyze` currently:
 - `score`
 - `signal`
 - `prediction`
@@ -130,301 +176,284 @@ Response keys:
 - `intent_distribution`
 - `insight`
 - `segments`
+- `growth_drivers`
+- `risk_drivers`
 - `drivers`
+- `timeline`
 
-### `POST /upload`
-- Input: multipart file (`.txt` or `.pdf`)
-- Flow: text extraction -> `_run_analysis`
-- Output schema matches `/analyze`
+`/upload`:
+- Supports `.txt` and `.pdf`.
+- Parses text, then calls same `_run_analysis`.
 
-### `POST /compare`
-Request:
-```json
-{ "transcript_1": "...", "transcript_2": "..." }
-```
-Response keys:
-- `transcript_1`
-- `transcript_2`
-- `signal_difference`
-- `risk_delta`
-- `confidence_delta`
-- `trend`
-- `comparison`
-
-Not implemented:
-- `/auth/*`
-- `/save-analysis`
-- `/history`
-- `/analysis/{id}`
+`/compare`:
+- Runs `_run_analysis` on two transcripts.
+- Returns both analyses plus `risk_delta`, `confidence_delta`, `trend`, and `signal_difference`.
 
 ---
 
-## 5. MODEL DETAILS (CURRENT)
+## 6. Transcript Segmentation + Intent Path
 
-### FinBERT intent model (`finbert_intent_model.py`)
-- Uses: `BertForSequenceClassification` (`yiyanghkust/finbert-tone`)
-- Labels:
-  - `EXPANSION`
-  - `COST_PRESSURE`
-  - `STRATEGIC_PROBING`
-  - `GENERAL_UPDATE`
-- Classifier head is replaced with:
-  - `Linear(hidden, 256) -> ReLU -> Linear(256, 4)`
-- `load_weights()` behavior:
-  - expects `{"classifier": state_dict}` in `finbert_intent.pt`
-  - validates required keys: `0.weight`, `0.bias`, `2.weight`, `2.bias`
-  - prints `missing_keys` and `unexpected_keys`
-  - raises RuntimeError if classifier weights are missing
-- `predict()`:
-  - uses model logits directly
-  - returns `intent`, `logits`, `embedding`, `confidence`
-  - currently prints debug:
-    - `LOGITS: ...`
-    - `PRED CLASS: ...`
+File: `backend/financial_pragmatic_ai/analysis/transcript_analyzer.py`
 
-### Transcript analyzer (`transcript_analyzer.py`)
-- Tries to load `finbert_intent.pt`; if missing, falls back to pragmatic transformer.
-- If classifier load fails with RuntimeError, exception is re-raised.
-- Current debug prints in `analyze()`:
-  - `🔥 NEW VERSION LOADED 🔥`
-  - `MODEL INTENT: ...`
-- Heuristic intent override: **currently disabled**.
-- Intent smoothing call: **currently commented out** (`# results = smooth_intents(results)`).
+Segmentation behavior:
+- First tries speaker cue splitting (`CEO:`, `CFO:`, `ANALYST:`, `EXECUTIVE:`, `OPERATOR:`).
+- Sentence splitting and chunking used internally (`chunk_size` dynamically 1/2/3).
+- Falls back to `parse_transcript()` in `analysis/transcript_parser.py`.
+- If still <=1 segment, fallback chunking on cleaned full text.
+- Filters out very short segments (`<10` chars).
 
-### Conversation model usage
-- Uses `ConversationAttentionModel` only if `conversation_attention.pt` exists.
-- `conversation_attention.pt` is **not present** in models folder.
-- Runtime therefore falls back to score-based signal path for conversation signal.
+Runtime debug prints currently present:
+- `🔥 NEW VERSION LOADED 🔥`
+- `[DEBUG] Parsed N segments`
+- `MODEL INTENT: ...`
+- sample output + intent distribution.
+
+Intent smoothing exists as function `smooth_intents(...)` but is currently **disabled**:
+- `# results = smooth_intents(results)` is commented.
 
 ---
 
-## 6. SIGNAL AGGREGATION LOGIC (CURRENT)
+## 7. Model Loading and Usage (Current)
 
-File: `analysis/financial_signal_engine.py`
+### 7.1 FinBERT intent model wrapper
+File: `backend/financial_pragmatic_ai/models/finbert_intent_model.py`
 
-### `compute_risk_score(intents)`
-- Current mapping:
-  - `EXPANSION` -> `+1.0`
-  - `STRONG_GROWTH` -> `+1.0`
-  - `COST_PRESSURE` -> `-1.0`
-  - `RISK` -> `-1.0`
-  - `GENERAL_UPDATE` -> `0.0`
-  - `STRATEGIC_PROBING` -> `0.0`
-- Returns mean score across intents.
-- Current debug prints:
-  - `INTENTS: ...`
-  - `SCORE: ...`
+- `FinBERTIntentModel` loads from HuggingFace repo (hardcoded):
+  - `HF_INTENT_REPO = "SarcoNarco/finbert_intent_v3"`
+- Uses `AutoModelForSequenceClassification.from_pretrained(...)`.
+- Predict returns:
+  - `intent`, `logits`, `embedding` (CLS), `confidence`.
+- Label map in predict:
+  - `0 -> EXPANSION`
+  - `1 -> COST_PRESSURE`
+  - `2 -> STRATEGIC_PROBING`
+  - `3 -> GENERAL_UPDATE`
 
-### `derive_signal(score)`
-- Current thresholds:
-  - `score > 0.2` -> `growth`
-  - `score < -0.2` -> `risk`
-  - else `neutral`
-- Current debug prints:
-  - `FINAL SCORE: ...`
-  - `FINAL SIGNAL: ...`
+Important verified behavior:
+- Constructor parameter `model_dir` is accepted but not used to load local model; load path is HF repo.
 
-### Important consistency note (verified from code)
-`backend/api/server.py::_run_analysis()` currently clamps score to ranges `<=35`, `>=65`, or `36..64` before calling `derive_signal()`, while `derive_signal()` now expects a small-range score around `[-1, 1]`.
+### 7.2 TranscriptAnalyzer intent fallback
+If FinBERT wrapper fails:
+- falls back to `FinancialPragmaticTransformer` weights downloaded from HF repo:
+  - repo: `SarcoNarco/financial-models`
+  - file: `pragmatic_transformer_trained.pt`
 
-This is a live logic mismatch and can skew final API `signal` output.
+### 7.3 Conversation attention model
+- Architecture exists in `models/conversation_attention_model.py`.
+- `TranscriptAnalyzer` attempts to load local `backend/financial_pragmatic_ai/models/conversation_attention.pt`.
+- If file missing -> warning + rule-based signal fallback.
 
----
-
-## 7. FRONTEND STATE (CURRENT)
-
-### API client
-- `frontend/src/api/client.js`
-- Functions:
-  - `analyzeTranscript(transcript)` -> `/analyze`
-  - `uploadTranscript(file)` -> `/upload`
-  - `compareTranscripts(transcript1, transcript2)` -> `/compare`
-
-### Dashboard UI
-- `DashboardPage.js` is the only page.
-- Analyze tab:
-  - transcript textarea
-  - upload control
-  - summary, timeline, heatmap, distribution, growth/risk driver panels
-- Compare tab:
-  - two transcript textareas
-  - compare result panel
-
-### Visual components
-- `SummaryCard.js`: score/prediction/confidence/volatility cards and confidence bar
-- `TimelineChart.js`: smoothed line chart with tooltips
-- `SignalHeatmap.js`: intent count cards
+### 7.4 Local model artifacts state
+Verified locally:
+- No `.pt` or `.safetensors` files present under `backend/`.
+- Model files are not committed (also ignored by `.gitignore`).
 
 ---
 
-## 8. EVALUATION PIPELINE (CURRENT)
+## 8. Signal/Score/Prediction Logic (Current)
 
-Path: `backend/financial_pragmatic_ai/evaluation/better_than_fin/evaluate.py`
+File: `backend/financial_pragmatic_ai/analysis/financial_signal_engine.py`
 
-- `_safe_analyze()` no longer suppresses stdout.
-- Evaluation prints prediction distributions:
-  - `FinBERT prediction distribution: ...`
-  - `Our system prediction distribution: ...`
-- Collapse guard:
-  - prints `[ERROR] Model collapse detected` if one class >80% of custom predictions.
-- No model retraining happens in evaluation.
+Intent-to-score mapping (`compute_risk_score`):
+- `EXPANSION: +1.0`
+- `COST_PRESSURE: -1.0`
+- `STRATEGIC_PROBING: +0.2`
+- `GENERAL_UPDATE: 0.0`
+
+Returned score is average over segments.
+
+Signal derivation (`derive_signal`):
+- `score > 0.2 -> growth`
+- `score < -0.2 -> risk`
+- else `neutral`
+
+Additional outputs:
+- `compute_confidence`: dominant signal percentage (0–100)
+- `compute_intent_distribution`: percentages by intent (0–100)
+- `detect_volatility`: LOW/MEDIUM/HIGH via std of mapped signal values
+
+File: `analysis/market_predictor.py`
+- `predict_market_outlook(signal, risk_score, volatility, intent_distribution)` returns prediction + explanation.
+
+File: `analysis/insight_engine.py`
+- `extract_key_drivers(...)` performs sentence selection, compression, quality gate, semantic dedup.
+- Outputs `growth_drivers` and `risk_drivers`.
 
 ---
 
-## 9. KNOWN LIMITATIONS / RISKS
+## 9. Training Pipelines (Present in Repo)
 
-1. **Score scale mismatch in API path**
-   - `_run_analysis()` clamps score to 35/65 style range, but `derive_signal()` expects near-zero thresholds.
+### FinBERT intent training
+- `backend/financial_pragmatic_ai/training/train_finbert_intent_v2.py`
+  - Calls `train_finbert_intent_model(...)`.
+- Main trainer implementation in `models/finbert_intent_model.py`:
+  - Transcript-level deterministic split via hash (`<80` train, else eval).
+  - Duplicate normalized text overlap warning across splits.
+  - 4-class mapping and balancing.
+  - HuggingFace `Trainer` training.
 
-2. **Conversation attention weights missing**
-   - `conversation_attention.pt` not present, so rule-based fallback is used.
+### Unified V2 pipeline
+- `backend/financial_pragmatic_ai/training/train_v2_pipeline.py`
+  - Trains FinBERT intent model.
+  - Builds 3-step conversation sequences.
+  - Streams embeddings to disk (`./embeddings/*.pt`).
+  - Trains conversation attention model from embedding files.
 
-3. **Debug logging is very verbose**
-   - logits, intents, and score prints are active in runtime.
-
-4. **Fallback behavior exists**
-   - if finetuned checkpoint is missing, system falls back to pragmatic transformer intent model.
+### Other legacy trainers
+- `train_pragmatic_transformer.py`
+- `train_conversation_model.py`
+- `train_intent_classifier.py`
+- `train_pragmatic_transformwer.py` (filename typo retained in repo)
 
 ---
 
-## 10. HOW TO RUN
+## 10. Datasets (Verified)
 
-Backend:
+### `backend/financial_pragmatic_ai/data/pragmatic_intent_dataset_clean.csv`
+- Columns: `text`, `speaker`, `intent`
+- Row count: `99,926`
+
+### `backend/financial_pragmatic_ai/data/pragmatic_intent_dataset.csv`
+- Columns: `text`, `speaker`, `intent`
+- Row count: `140,303`
+
+### `backend/financial_pragmatic_ai/data/conversation_signal_dataset.csv`
+- Columns: `CEO_intent`, `CFO_intent`, `Analyst_intent`, `signal`
+- Row count: `64`
+
+### `backend/financial_pragmatic_ai/data/intent_dataset.csv`
+- Columns: `text`, `intent`
+- Row count: `8`
+
+---
+
+## 11. Evaluation Pipeline and Latest Saved Results
+
+Evaluation module:
+- `backend/financial_pragmatic_ai/evaluation/better_than_fin/evaluate.py`
+- Entrypoint:
+  - `python -m financial_pragmatic_ai.evaluation.better_than_fin.evaluate`
+
+Behavior:
+- Loads full clean dataset.
+- Builds balanced sample by signal (`per_class_target`, default `80`).
+- Runs:
+  - FinBERT baseline sentiment -> signal
+  - Custom system pipeline -> signal
+- Saves metrics/artifacts in `evaluation/better_than_fin/results/`.
+
+Latest saved metrics from `results/metrics_summary.json`:
+- Sample size: `240` (80 per class)
+- FinBERT:
+  - Accuracy: `0.5041666666666667`
+  - Macro F1: `0.4523600209314495`
+- Our system:
+  - Accuracy: `0.3333333333333333`
+  - Macro F1: `0.16666666666666666`
+- Improvement deltas:
+  - Accuracy delta: `-0.17083333333333334`
+  - Macro F1 delta: `-0.2856933542647828`
+- Our system prediction distribution (saved behavior): all-neutral confusion matrix.
+
+Saved artifacts currently present:
+- `metrics_summary.json`
+- `classification_report.txt`
+- `disagreement_cases.csv`
+- `ours_correct_finbert_wrong.csv`
+- `confusion_matrix_ours_normalized.png`
+- `confusion_matrix_finbert_normalized.png`
+- `model_comparison.png`
+- `per_class_f1.png`
+- `agreement_bar.png`
+- `class_distribution.png`
+
+---
+
+## 12. Frontend State (Two Apps)
+
+### 12.1 `frontend/` (CRA)
+- Stateless dashboard.
+- Uses backend APIs directly:
+  - `/analyze`, `/upload`, `/compare`
+- `src/api/client.js` sends `{ transcript }` to `/analyze`.
+- Contains Analyze + Compare tabs and dashboard components.
+
+### 12.2 `frontend_v2/` (Vite + Tailwind)
+- Uses Supabase auth and Supabase table `analyses` for history/compare selection.
+- `App.jsx` gates app via session (`if !session return <Auth />`).
+- Analyze action calls backend `/analyze` and maps response.
+- File upload in `frontend_v2` reads local `.txt` into textarea; it does **not** call backend `/upload`.
+- Compare tab uses two selected history records from Supabase (not backend `/compare` endpoint).
+
+Implication:
+- Backend is stateless, but `frontend_v2` introduces external persistence/auth through Supabase.
+
+---
+
+## 13. Known Inconsistencies / Risks (Verified in Code)
+
+1. **Two API server modules exist**
+   - Active: `backend/api/server.py`
+   - Legacy: `backend/financial_pragmatic_ai/api/server.py`
+   - Can cause confusion if wrong uvicorn target is used.
+
+2. **Score semantic mismatch in insight/prediction thresholds**
+   - `compute_risk_score` returns small signed average around `[-1, 1]`.
+   - `generate_insight` and parts of `predict_market_outlook` still use thresholds like `35/45/55/60/65`.
+   - This creates logically inconsistent behavior.
+
+3. **`train_v2_pipeline.py` references missing attribute**
+   - Uses `finbert_wrapper.encoder_device`.
+   - `FinBERTIntentModel` does not define `encoder_device`.
+   - This is a likely runtime error path in V2 pipeline training.
+
+4. **Very verbose debug logging remains active in production paths**
+   - Analyzer and signal engine print logits/intents/scores/distributions.
+
+5. **No local model binaries in repo**
+   - Runtime depends on HuggingFace downloads (`SarcoNarco/*` repos).
+
+6. **README is stale vs current implementation**
+   - Still describes older minimal response and only `frontend/` flow.
+
+---
+
+## 14. How To Run (Verified commands)
+
+### Backend
 ```bash
 cd /Users/saroshnadaf/Documents/NLP_Proj/backend
 pip install -r requirements.txt
 uvicorn api.server:app --reload
 ```
 
-Frontend:
+### Frontend (CRA)
 ```bash
 cd /Users/saroshnadaf/Documents/NLP_Proj/frontend
 npm install
 npm start
 ```
 
-URLs:
-- API: `http://127.0.0.1:8000`
-- UI: `http://localhost:3000`
+### Frontend V2 (Vite)
+```bash
+cd /Users/saroshnadaf/Documents/NLP_Proj/frontend_v2
+npm install
+npm run dev
+```
+
+`frontend_v2` additionally requires env vars for Supabase:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
 
 ---
 
-## 11. RECENT DEBUGGING CHANGES (LATEST)
+## 15. Important Notes for Next Agent
 
-- FinBERT intent loader switched to `BertForSequenceClassification` with explicit classifier head checks.
-- Transcript analyzer heuristic override disabled.
-- Transcript analyzer smoothing disabled.
-- `_safe_analyze()` in evaluation no longer redirects stdout.
-- Aggregation debug prints added in `financial_signal_engine.py`.
-
----
-
-## 12. IMPORTANT NOTES FOR NEXT AGENT
-
-- Do not assume legacy auth/database still exists; runtime is stateless.
-- If fixing final signal correctness, start with `_run_analysis()` + `compute_risk_score()`/`derive_signal()` scale alignment.
-- Keep changes modular: model loading, parser, and API aggregation are separate concerns.
-- If reducing log noise, remove temporary debug prints only after validating intent/signal distributions.
-- Preserve `/analyze` response schema to avoid frontend breakage.
-
----
-
-## 13. CURRENT STATE UPDATE (2026-04-04)
-
-### PROJECT OVERVIEW
-- Financial NLP system for earnings-call analysis and signal extraction.
-- FastAPI backend + React frontend.
-- MongoDB and authentication are removed for now (stateless runtime).
-- FinBERT-based custom fine-tuned intent model is active.
-- Conversation pipeline: transcript -> intents -> scoring -> signal.
-
-### CURRENT ARCHITECTURE
-- FinBERT encoder: `yiyanghkust/finbert-tone`.
-- Custom classifier head with 4 classes:
-  - `EXPANSION`
-  - `COST_PRESSURE`
-  - `STRATEGIC_PROBING`
-  - `GENERAL_UPDATE`
-- `TranscriptAnalyzer` core methods:
-  - `predict_intent()`
-  - `analyze()`
-- Signal pipeline:
-  - `compute_risk_score()`
-  - `derive_signal()`
-
-### TRAINING (V2)
-- HuggingFace `Trainer` is used.
-- Dataset is built from the evaluation dataset source:
-  - `growth -> EXPANSION`
-  - `risk -> COST_PRESSURE`
-  - `neutral -> GENERAL_UPDATE`
-  - `STRATEGIC_PROBING` via question/analyst-prompt heuristic.
-- Balanced dataset is used before training.
-- Training config:
-  - `epochs = 3`
-  - `lr = 2e-5`
-  - `batch_size = 16`
-- Model is saved with:
-  - `save_pretrained("models/finbert_intent_v3")`
-
-### CURRENT MODEL STATUS
-- Model is trained and loaded from pretrained directory format.
-- `num_labels = 4` is active at runtime.
-- No classifier head mismatch in inference path.
-- No single-class model collapse in current reported evaluation.
-
-### EVALUATION SETUP
-- Balanced sample with `per_class_target = 80`.
-- Pipeline:
-  - `text -> intent -> segments -> score -> signal`
-
-### LATEST RESULTS (IMPORTANT)
-FinBERT:
-- Accuracy: `0.5042`
-- F1: `0.4524`
-
-Our System:
-- Accuracy: `0.8667`
-- F1: `0.8695`
-
-Improvement:
-- Delta Accuracy: `+0.3625`
-- Delta F1: `+0.4171`
-
-Prediction distribution:
-- growth: `69`
-- neutral: `112`
-- risk: `59`
-
-### KNOWN ISSUES / RISKS
-- Potential data leakage risk: current training dataset is derived from evaluation dataset source.
-- `STRATEGIC_PROBING` impact on final signal remains weak.
-- Conversation attention model training is not active in runtime path yet; fallback logic is still used.
-- Evaluation sample size is relatively small (`240`).
-
-### NEXT PRIORITIES
-1. Validate with a proper train/test split (no leakage).
-2. Improve `STRATEGIC_PROBING` weight in scoring.
-3. Train and integrate `conversation_attention` model.
-4. Improve dataset quality/coverage.
-5. Prepare deployment phase after robustness validation.
-
-### IMPORTANT NOTES FOR NEXT AGENT
-- Do not retrain blindly; verify data split integrity first.
-- Do not modify working pipeline unless necessary.
-- Focus on validation and robustness before adding new complexity.
-- System is working; optimize and harden rather than rebuild.
-
-## CURRENT STATE (UPDATED)
-
-- End-to-end pipeline WORKING
-- Frontend fully connected to backend
-- Distribution + drivers now visible
-- Glass UI implemented
-- Tabs + sidebar working
-
-## KNOWN ISSUES
-
-- Driver extraction is raw (needs cleaning/summarization)
-- Signal calibration may need tuning
-- No auth / persistence yet
+- Do not assume the system is fully stateless if you are working on `frontend_v2`; it depends on Supabase.
+- Use `backend/api/server.py` as the backend source of truth.
+- Treat `metrics_summary.json` as the latest saved benchmark unless you rerun evaluation.
+- If fixing model-performance collapse, inspect:
+  - segmentation output count in `TranscriptAnalyzer`
+  - intent distribution from `predict_intent`
+  - score-threshold consistency across `financial_signal_engine.py` and `market_predictor.py`
+- If working on V2 training, resolve `encoder_device` mismatch before execution.
