@@ -19,17 +19,17 @@ weighted avg     0.5042    0.5042    0.4524       240
 === OUR SYSTEM CLASSIFICATION REPORT ===
               precision    recall  f1-score   support
 
-      growth     0.0000    0.0000    0.0000        80
-     neutral     0.3333    1.0000    0.5000        80
-        risk     0.0000    0.0000    0.0000        80
+      growth     1.0000    0.7625    0.8652        80
+     neutral     0.7054    0.9875    0.8229        80
+        risk     0.8806    0.7375    0.8027        80
 
-    accuracy                         0.3333       240
-   macro avg     0.1111    0.3333    0.1667       240
-weighted avg     0.1111    0.3333    0.1667       240
+    accuracy                         0.8292       240
+   macro avg     0.8620    0.8292    0.8303       240
+weighted avg     0.8620    0.8292    0.8303       240
 
 
 === AGREEMENT ANALYSIS ===
-Agreement rate: 0.5000
-Disagreement count: 120
-Ours correct, FinBERT wrong: 22
-FinBERT correct, Ours wrong: 63
+Agreement rate: 0.5625
+Disagreement count: 105
+Ours correct, FinBERT wrong: 90
+FinBERT correct, Ours wrong: 12

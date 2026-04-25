@@ -26,6 +26,7 @@ class EarningsCallAnalyzer:
 
     def analyze(self, transcript):
         segments = self.transcript_analyzer.analyze(transcript)
+        fallback_used = bool(getattr(self.transcript_analyzer, "last_fallback_used", False))
         model_signal = (
             self.transcript_analyzer.predict_conversation_signal(segments)
             if segments
@@ -45,4 +46,5 @@ class EarningsCallAnalyzer:
             "timeline_signals": timeline_signals,
             "aggregation": aggregation,
             "insight": insight,
+            "fallback_used": fallback_used,
         }

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+import logging
 from pathlib import Path
 import re
 from collections import Counter
+import threading
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -34,6 +37,9 @@ CONVERSATION_ATTENTION_PATH = MODELS_DIR / "conversation_attention.pt"
 
 _HF_FALLBACK_REPO = "SarcoNarco/financial-models"
 _HF_FALLBACK_FILENAME = "pragmatic_transformer_trained.pt"
+_FALLBACK_LOAD_TIMEOUT_SECONDS = 20
+
+logger = logging.getLogger(__name__)
 
 if torch.backends.mps.is_available():
     device = torch.device("mps")
@@ -98,21 +104,21 @@ def _correct_intent(text: str, intent: str, confidence: float) -> str:
     if has_pct and _GROWTH_WORDS.search(text) and confidence <= _HIGH_CONFIDENCE:
         new_intent = "EXPANSION"
         if new_intent != intent:
-            print(f"CORRECTED INTENT: {intent} → {new_intent}  [{text[:60]}]")
+            logger.debug("Corrected intent %s -> %s text=%s", intent, new_intent, text[:60])
         return new_intent
 
     # Rule 2 — numeric decline signal
     if has_pct and _DECLINE_WORDS.search(text) and confidence <= _HIGH_CONFIDENCE:
         new_intent = "COST_PRESSURE"
         if new_intent != intent:
-            print(f"CORRECTED INTENT: {intent} → {new_intent}  [{text[:60]}]")
+            logger.debug("Corrected intent %s -> %s text=%s", intent, new_intent, text[:60])
         return new_intent
 
     # Rule 3 — soft cost bias (low-confidence model only)
     if _COST_WORDS.search(text) and confidence < _LOW_CONFIDENCE:
         new_intent = "COST_PRESSURE"
         if new_intent != intent:
-            print(f"CORRECTED INTENT: {intent} → {new_intent}  [{text[:60]}]")
+            logger.debug("Corrected intent %s -> %s text=%s", intent, new_intent, text[:60])
         return new_intent
 
     return intent
@@ -140,17 +146,44 @@ def smooth_intents(results, window=5):
     return smoothed
 
 
-def _load_fallback_model_weights(device):
-    """Download fallback model weights from HuggingFace Hub."""
-    print(f"[INFO] Loading fallback model from HuggingFace: {_HF_FALLBACK_REPO} / {_HF_FALLBACK_FILENAME}")
+def _load_fallback_model_weights():
+    """
+    Download fallback model weights from HuggingFace Hub.
+    Always loads on CPU for low-memory production safety.
+    """
+    logger.info(
+        "Fallback load start repo=%s file=%s",
+        _HF_FALLBACK_REPO,
+        _HF_FALLBACK_FILENAME,
+    )
     try:
         model_path = hf_hub_download(
             repo_id=_HF_FALLBACK_REPO,
             filename=_HF_FALLBACK_FILENAME,
         )
-        return torch.load(model_path, map_location=device)
+        load_attempts = (
+            {"map_location": "cpu", "weights_only": True, "mmap": True},
+            {"map_location": "cpu", "weights_only": True},
+            {"map_location": "cpu", "mmap": True},
+            {"map_location": "cpu"},
+        )
+
+        last_error = None
+        for kwargs in load_attempts:
+            try:
+                return torch.load(model_path, **kwargs)
+            except TypeError as exc:
+                last_error = exc
+                continue
+            except Exception as exc:
+                last_error = exc
+                break
+
+        if last_error is not None:
+            logger.error("Fallback weights load failed after retries.", exc_info=True)
+        return None
     except Exception as exc:
-        print(f"[ERROR] Failed to load fallback model from HuggingFace: {exc}")
+        logger.error("Failed to download fallback model weights.", exc_info=True)
         return None
 
 
@@ -159,27 +192,26 @@ class TranscriptAnalyzer:
     def __init__(self):
         self.intent_model = None
         self.fallback_intent_model = None
+        self._fallback_device = torch.device("cpu")
+        self._fallback_load_attempted = False
+        self._fallback_load_failed = False
+        self._fallback_load_lock = threading.Lock()
+        self._fallback_load_timeout_seconds = _FALLBACK_LOAD_TIMEOUT_SECONDS
+        self._last_fallback_used = False
         self._last_embeddings = []
 
         try:
             self.intent_model = FinBERTIntentModel(device=device)
-            print(f"[INFO] FinBERT intent num_labels: {self.intent_model.model.config.num_labels}")
+            logger.info(
+                "FinBERT intent model ready with num_labels=%s",
+                self.intent_model.model.config.num_labels,
+            )
         except Exception as exc:
-            print(f"[ERROR] FinBERT intent model failed to load: {exc}")
+            logger.error("FinBERT intent model failed to load.", exc_info=True)
             self.intent_model = None
 
-        state_dict = _load_fallback_model_weights(device)
-        if state_dict is not None:
-            try:
-                self.fallback_intent_model = FinancialPragmaticTransformer()
-                self.fallback_intent_model.load_state_dict(state_dict)
-                self.fallback_intent_model.to(device)
-                self.fallback_intent_model.eval()
-            except Exception as exc:
-                print(f"[WARN] Fallback model state_dict load failed: {exc}")
-                self.fallback_intent_model = None
-        else:
-            self.fallback_intent_model = None
+        # Fallback model is lazy-loaded on demand to avoid startup OOM/restart loops.
+        logger.info("Fallback pragmatic model lazy-loading enabled.")
 
         self.conversation_model = load_conversation_attention_model(
             model_path=CONVERSATION_ATTENTION_PATH,
@@ -187,7 +219,68 @@ class TranscriptAnalyzer:
             device=device,
         )
         if self.conversation_model is None:
-            print("[WARN] Conversation attention model not found. Using rule-based fallback.")
+            logger.warning("Conversation attention model not found. Using rule-based fallback.")
+
+    def _ensure_fallback_model_loaded(self) -> bool:
+        """Lazily load fallback model exactly once; never raise to caller."""
+        if self.fallback_intent_model is not None:
+            return True
+        if self._fallback_load_failed:
+            return False
+
+        with self._fallback_load_lock:
+            if self.fallback_intent_model is not None:
+                return True
+            if self._fallback_load_failed:
+                return False
+            if self._fallback_load_attempted:
+                return False
+
+            self._fallback_load_attempted = True
+            logger.info(
+                "Attempting lazy load of fallback pragmatic model (timeout=%ss).",
+                self._fallback_load_timeout_seconds,
+            )
+
+            executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="fallback_loader")
+            future = executor.submit(_load_fallback_model_weights)
+            try:
+                state_dict = future.result(timeout=self._fallback_load_timeout_seconds)
+            except FuturesTimeoutError:
+                self._fallback_load_failed = True
+                self.fallback_intent_model = None
+                logger.error(
+                    "Fallback model loading timed out after %ss; fallback disabled.",
+                    self._fallback_load_timeout_seconds,
+                )
+                return False
+            except Exception:
+                self._fallback_load_failed = True
+                self.fallback_intent_model = None
+                logger.error("Fallback model loading failed unexpectedly; fallback disabled.", exc_info=True)
+                return False
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
+
+            if state_dict is None:
+                self._fallback_load_failed = True
+                self.fallback_intent_model = None
+                logger.warning("Fallback model weights unavailable; fallback disabled for this process.")
+                return False
+
+            try:
+                model = FinancialPragmaticTransformer()
+                model.load_state_dict(state_dict)
+                model.to(self._fallback_device)
+                model.eval()
+                self.fallback_intent_model = model
+                logger.info("Fallback pragmatic model loaded successfully (CPU).")
+                return True
+            except Exception:
+                self._fallback_load_failed = True
+                self.fallback_intent_model = None
+                logger.error("Fallback model initialization failed; fallback disabled.", exc_info=True)
+                return False
 
     @staticmethod
     def _clean_text(text: str) -> str:
@@ -307,27 +400,40 @@ class TranscriptAnalyzer:
 
     def predict_intent(self, text, speaker):
         if self.intent_model is not None:
-            output = self.intent_model.predict(text)
-            raw_intent = output["intent"]
-            confidence = float(output.get("confidence", 0.0))
-            intent = _correct_intent(text, raw_intent, confidence)
-            cls_embedding = output["embedding"].float()
-            final_embedding = torch.cat([cls_embedding, _speaker_vector(speaker)], dim=-1)
-            return {
-                "intent": intent,
-                "logits": output["logits"],
-                "embedding": final_embedding,
-                "confidence": confidence,
-            }
+            try:
+                output = self.intent_model.predict(text)
+                raw_intent = output["intent"]
+                confidence = float(output.get("confidence", 0.0))
+                intent = _correct_intent(text, raw_intent, confidence)
+                cls_embedding = output["embedding"].float()
+                final_embedding = torch.cat([cls_embedding, _speaker_vector(speaker)], dim=-1)
+                return {
+                    "intent": intent,
+                    "logits": output["logits"],
+                    "embedding": final_embedding,
+                    "confidence": confidence,
+                    "fallback_used": False,
+                }
+            except Exception:
+                logger.error("FinBERT intent inference failed; trying fallback.", exc_info=True)
 
-        if self.fallback_intent_model is not None:
-            raw_intent = self.fallback_intent_model.predict(
-                text,
-                speaker=speaker,
-                target_device=device,
-            )
+        if self.fallback_intent_model is not None or self._ensure_fallback_model_loaded():
+            try:
+                raw_intent = self.fallback_intent_model.predict(
+                    text,
+                    speaker=speaker,
+                    target_device=self._fallback_device,
+                )
+                fallback_used = True
+            except Exception:
+                self._fallback_load_failed = True
+                self.fallback_intent_model = None
+                logger.error("Fallback intent inference failed; fallback disabled.", exc_info=True)
+                raw_intent = "GENERAL_UPDATE"
+                fallback_used = False
         else:
             raw_intent = "GENERAL_UPDATE"
+            fallback_used = False
 
         # Fallback path: confidence unknown — apply correction with neutral confidence
         intent = _correct_intent(text, raw_intent, confidence=0.5)
@@ -340,6 +446,7 @@ class TranscriptAnalyzer:
             "logits": torch.zeros(4, dtype=torch.float32),
             "embedding": fallback_embedding,
             "confidence": 0.5,
+            "fallback_used": fallback_used,
         }
 
     def predict_conversation_signal(self, intents):
@@ -358,16 +465,18 @@ class TranscriptAnalyzer:
         return derive_signal(score)
 
     def analyze(self, raw_text):
-        print("🔥 NEW VERSION LOADED 🔥")
+        logger.info("Transcript analysis request started.")
         segments = self._build_segments(raw_text)
-        print(f"[DEBUG] Parsed {len(segments)} segments")
+        logger.debug("Parsed %s segments.", len(segments))
         results = []
         embeddings = []
+        fallback_used = False
 
         for seg in segments:
             prediction = self.predict_intent(seg["text"], seg["speaker"])
             intent = prediction["intent"]
-            print("MODEL INTENT:", intent)  # DEBUG
+            logger.debug("Model intent=%s speaker=%s", intent, seg["speaker"])
+            fallback_used = fallback_used or bool(prediction.get("fallback_used", False))
 
             results.append({
                 "speaker": seg["speaker"],
@@ -378,11 +487,16 @@ class TranscriptAnalyzer:
 
         # results = smooth_intents(results)
         self._last_embeddings = embeddings[: len(results)]
+        self._last_fallback_used = fallback_used
 
-        print("[DEBUG] SAMPLE OUTPUT:")
+        logger.debug("Sample output:")
         for result in results[:5]:
-            print(result)
+            logger.debug("%s", result)
         intent_distribution = Counter(result["intent"] for result in results)
-        print("[DEBUG] Intent distribution:", dict(intent_distribution))
+        logger.debug("Intent distribution=%s", dict(intent_distribution))
 
         return results
+
+    @property
+    def last_fallback_used(self) -> bool:
+        return bool(self._last_fallback_used)

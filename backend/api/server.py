@@ -1,4 +1,5 @@
 import os
+import logging
 os.environ.setdefault("HF_HOME", "/tmp/hf_cache")
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -17,6 +18,12 @@ from financial_pragmatic_ai.analysis.financial_signal_engine import (
 )
 from financial_pragmatic_ai.analysis.insight_engine import extract_key_drivers
 from financial_pragmatic_ai.analysis.market_predictor import predict_market_outlook
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(title="Financial Pragmatic AI API")
@@ -39,6 +46,7 @@ def _run_analysis(transcript: str):
 
     result = analyzer.analyze(transcript)
     segments = result["segments"]
+    fallback_used = bool(result.get("fallback_used", False))
     if len(segments) == 0:
         return {"error": "Could not parse transcript"}
 
@@ -52,8 +60,8 @@ def _run_analysis(transcript: str):
     volatility_std = round(compute_signal_std(segments), 4)
     intent_distribution = compute_intent_distribution(segments)
     signal_distribution = compute_signal_distribution(segments)
-    print("[DEBUG] intent distribution:", intent_distribution)
-    print("[DEBUG] signal distribution:", signal_distribution)
+    logger.info("intent_distribution=%s", intent_distribution)
+    logger.info("signal_distribution=%s", signal_distribution)
     market = predict_market_outlook(
         signal=signal,
         risk_score=score,
@@ -63,8 +71,8 @@ def _run_analysis(transcript: str):
     insight = generate_insight(score, segments)
     drivers = extract_key_drivers(segments)
 
-    print("CLEAN GROWTH DRIVERS:", drivers["growth_drivers"])
-    print("CLEAN RISK DRIVERS:", drivers["risk_drivers"])
+    logger.info("growth_drivers=%s", drivers["growth_drivers"])
+    logger.info("risk_drivers=%s", drivers["risk_drivers"])
 
     _INTENT_VALUE = {
         "EXPANSION": 1,
@@ -81,7 +89,7 @@ def _run_analysis(transcript: str):
         }
         for i, seg in enumerate(segments)
     ]
-    print("TIMELINE LENGTH:", len(timeline))
+    logger.info("timeline_length=%s fallback_used=%s", len(timeline), fallback_used)
 
     return {
         "score": score,
@@ -98,6 +106,7 @@ def _run_analysis(transcript: str):
         "risk_drivers": drivers["risk_drivers"],
         "drivers": drivers,
         "timeline": timeline,
+        "fallback_used": fallback_used,
     }
 
 

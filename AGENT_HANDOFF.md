@@ -4,8 +4,8 @@
 
 - Repository: `NLP_Proj`
 - Branch: `main`
-- Latest commit (checked locally): `77f6785` (`fix torch version for railway`)
-- Date of this handoff update: 2026-04-10
+- Latest commit (checked locally): `5cb423f` (`lock production dependencies`)
+- Date of this handoff update: 2026-04-12
 
 This document reflects the **current code in the repository**. Nothing below is inferred from prior chat context.
 
@@ -35,6 +35,7 @@ NLP_Proj/
 │   │   ├── schemas.py
 │   │   └── server.py                    # Active FastAPI entrypoint
 │   ├── requirements.txt
+│   ├── runtime.txt                      # Railway Python runtime pin
 │   └── financial_pragmatic_ai/
 │       ├── __init__.py
 │       ├── analysis/
@@ -180,6 +181,7 @@ Returned keys from `/analyze` currently:
 - `risk_drivers`
 - `drivers`
 - `timeline`
+- `fallback_used`
 
 `/upload`:
 - Supports `.txt` and `.pdf`.
@@ -202,11 +204,9 @@ Segmentation behavior:
 - If still <=1 segment, fallback chunking on cleaned full text.
 - Filters out very short segments (`<10` chars).
 
-Runtime debug prints currently present:
-- `🔥 NEW VERSION LOADED 🔥`
-- `[DEBUG] Parsed N segments`
-- `MODEL INTENT: ...`
-- sample output + intent distribution.
+Runtime logging currently present:
+- Uses `logging` module rather than `print()` in `TranscriptAnalyzer`.
+- Logs parsed segment counts, fallback load state, fallback failures, and per-request fallback usage.
 
 Intent smoothing exists as function `smooth_intents(...)` but is currently **disabled**:
 - `# results = smooth_intents(results)` is commented.
@@ -237,6 +237,13 @@ If FinBERT wrapper fails:
 - falls back to `FinancialPragmaticTransformer` weights downloaded from HF repo:
   - repo: `SarcoNarco/financial-models`
   - file: `pragmatic_transformer_trained.pt`
+- Fallback loading is production-hardened:
+  - lazy-loaded only when needed
+  - CPU-only load via `torch.load(..., map_location="cpu")`
+  - best-effort `weights_only=True` and `mmap=True`
+  - guarded by `threading.Lock`
+  - timeout-protected (`20` seconds)
+  - circuit breaker disables fallback for the process after first load/inference failure
 
 ### 7.3 Conversation attention model
 - Architecture exists in `models/conversation_attention_model.py`.
@@ -246,7 +253,22 @@ If FinBERT wrapper fails:
 ### 7.4 Local model artifacts state
 Verified locally:
 - No `.pt` or `.safetensors` files present under `backend/`.
-- Model files are not committed (also ignored by `.gitignore`).
+- Deploy-time model weights have been refactored off GitHub and onto Hugging Face-hosted repos.
+- Runtime depends on downloading model artifacts from Hugging Face instead of loading committed binaries from this repository.
+
+### 7.5 Deployment/runtime constraints reflected in code
+- Railway runtime pin: `backend/runtime.txt` -> `python-3.11.9`
+- CPU-only PyTorch install is pinned in `backend/requirements.txt`:
+  - `torch==2.2.2+cpu`
+- Dependency set is pinned for deployment stability:
+  - `transformers==4.40.2`
+  - `huggingface_hub==0.23.2`
+  - `numpy==1.26.4`
+  - `pandas==2.2.2`
+  - `datasets==2.20.0`
+  - `python-multipart==0.0.9`
+  - `pdfplumber==0.11.1`
+  - `protobuf==4.25.3`
 
 ---
 
@@ -343,17 +365,20 @@ Behavior:
 - Saves metrics/artifacts in `evaluation/better_than_fin/results/`.
 
 Latest saved metrics from `results/metrics_summary.json`:
+- Last rerun verified locally on `2026-04-12`
 - Sample size: `240` (80 per class)
 - FinBERT:
   - Accuracy: `0.5041666666666667`
   - Macro F1: `0.4523600209314495`
 - Our system:
-  - Accuracy: `0.3333333333333333`
-  - Macro F1: `0.16666666666666666`
+  - Accuracy: `0.8291666666666667`
+  - Macro F1: `0.8302953273507985`
 - Improvement deltas:
-  - Accuracy delta: `-0.17083333333333334`
-  - Macro F1 delta: `-0.2856933542647828`
-- Our system prediction distribution (saved behavior): all-neutral confusion matrix.
+  - Accuracy delta: `0.32500000000000007`
+  - Macro F1 delta: `0.37793530641934897`
+- Prediction distributions from latest rerun:
+  - FinBERT: `{'neutral': 120, 'growth': 102, 'risk': 18}`
+  - Our system: `{'growth': 61, 'risk': 67, 'neutral': 112}`
 
 Saved artifacts currently present:
 - `metrics_summary.json`
@@ -408,7 +433,7 @@ Implication:
    - This is a likely runtime error path in V2 pipeline training.
 
 4. **Very verbose debug logging remains active in production paths**
-   - Analyzer and signal engine print logits/intents/scores/distributions.
+   - `TranscriptAnalyzer` now uses structured `logging`, but `financial_signal_engine.py` still emits direct debug prints for intents/scores/signals.
 
 5. **No local model binaries in repo**
    - Runtime depends on HuggingFace downloads (`SarcoNarco/*` repos).
