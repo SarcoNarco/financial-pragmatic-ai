@@ -11,6 +11,16 @@ This document reflects the **current code in the repository**. Nothing below is 
 
 ---
 
+## Current Portfolio Direction
+
+- `frontend_v2/` is the canonical frontend for portfolio/deployment work.
+- `backend/api/server.py` is the canonical backend API entrypoint.
+- `backend/financial_pragmatic_ai/api/server.py` is legacy and should not be extended.
+- Model training and model-behavior work are frozen for now unless required for deployment stability.
+- Current priority: deployment clarity, reproducibility, and containerization readiness.
+
+---
+
 ## 2. Project Overview
 
 The project is a financial transcript analysis system.

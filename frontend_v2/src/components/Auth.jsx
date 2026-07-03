@@ -7,13 +7,24 @@ export default function Auth() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
+  const [messageType, setMessageType] = useState('error')
+
+  const showMessage = (text, type = 'error') => {
+    setMessage(text)
+    setMessageType(type)
+  }
 
   const handleLogin = async (e) => {
     e.preventDefault()
     setLoading(true)
     setMessage('')
+    setMessageType('error')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setMessage(error.message)
+    if (error) {
+      showMessage(error.message, 'error')
+    } else {
+      showMessage('Login successful.', 'success')
+    }
     setLoading(false)
   }
 
@@ -21,8 +32,22 @@ export default function Auth() {
     e.preventDefault()
     setLoading(true)
     setMessage('')
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (error) setMessage(error.message || 'Check your email for the confirmation link.')
+    setMessageType('error')
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    })
+
+    if (error) {
+      showMessage(error.message, 'error')
+    } else if (data?.session) {
+      showMessage('Signup successful. You are now logged in.', 'success')
+    } else {
+      showMessage('Signup successful. Check your email for the confirmation link.', 'success')
+    }
     setLoading(false)
   }
 
@@ -72,6 +97,7 @@ export default function Auth() {
           <div className="flex flex-col gap-3 pt-2">
             <button
               onClick={handleLogin}
+              type="button"
               disabled={loading}
               className="w-full bg-gradient-to-r from-blue-500 to-blue-700 hover:scale-[1.02] active:scale-95 transition-all py-2.5 rounded font-semibold text-white flex items-center justify-center gap-2"
             >
@@ -79,6 +105,7 @@ export default function Auth() {
             </button>
             <button
               onClick={handleSignUp}
+              type="button"
               disabled={loading}
               className="w-full bg-[#30363d] hover:bg-[#3a4149] py-2.5 rounded font-semibold transition-all text-sm"
             >
@@ -87,7 +114,7 @@ export default function Auth() {
           </div>
 
           {message && (
-            <div className={`text-sm mt-4 p-3 rounded border ${message.includes('Check') ? 'border-blue-500/30 bg-blue-500/10 text-blue-400' : 'border-red-500/30 bg-red-500/10 text-red-400'}`}>
+            <div className={`text-sm mt-4 p-3 rounded border ${messageType === 'success' ? 'border-blue-500/30 bg-blue-500/10 text-blue-400' : 'border-red-500/30 bg-red-500/10 text-red-400'}`}>
               {message}
             </div>
           )}

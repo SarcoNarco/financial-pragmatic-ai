@@ -3,10 +3,18 @@ __pycache__/
 *.pyo
 *.pyd
 *.DS_Store
+.DS_Store
+.env
+.env.local
+.env.*.local
+.pytest_cache/
 
 .venv/
 env/
 venv/
+node_modules/
+dist/
+build/
 
 .ipynb_checkpoints/
 
@@ -31,3 +39,9 @@ financial_pragmatic_ai/data/pragmatic_training_dataset/
 financial_pragmatic_ai/data/FinancialPhraseBank-v1.0/
 financial_pragmatic_ai/data/FinancialPhraseBank.zip
 financial_pragmatic_ai/data/__MACOSX/
+
+# Generated report outputs
+backend/financial_pragmatic_ai/evaluation/awt_frontend_v2_report.docx
+backend/financial_pragmatic_ai/evaluation/awt_frontend_v2_ieee_report.html
+backend/financial_pragmatic_ai/evaluation/awt_frontend_v2_ieee_report.pdf
+backend/financial_pragmatic_ai/evaluation/awt_report_assets/

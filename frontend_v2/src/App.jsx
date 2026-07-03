@@ -5,7 +5,8 @@ import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import Tabs from "./components/Tabs";
 
-const API_URL = "http://localhost:8000/analyze";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_URL = `${API_BASE_URL.replace(/\/$/, "")}/analyze`;
 
 export default function App() {
   const [transcript, setTranscript] = useState("");

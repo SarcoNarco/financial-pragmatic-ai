@@ -25,6 +25,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+APP_NAME = "financial-pragmatic-ai-api"
+API_ENTRYPOINT = "backend/api/server.py"
+MODEL_NAME = "SarcoNarco/finbert_intent_v3"
 
 app = FastAPI(title="Financial Pragmatic AI API")
 
@@ -37,6 +40,24 @@ app.add_middleware(
 )
 
 analyzer = None
+
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "ok",
+        "service": APP_NAME,
+    }
+
+
+@app.get("/version")
+def version():
+    return {
+        "app": APP_NAME,
+        "api_entrypoint": API_ENTRYPOINT,
+        "model": MODEL_NAME,
+        "status": "portfolio-hardening",
+    }
 
 
 def _run_analysis(transcript: str):
