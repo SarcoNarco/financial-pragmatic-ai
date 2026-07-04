@@ -79,6 +79,43 @@ Recommended Railway backend settings:
 - Python runtime: keep `python-3.11.9`
 - Ensure outbound network access is available for Hugging Face model downloads.
 
+## Docker Notes
+
+Backend image build command from the repo root:
+
+```bash
+docker build --platform linux/amd64 -t financial-pragmatic-ai-backend ./backend
+```
+
+Backend container run command:
+
+```bash
+docker run --rm -p 8000:8000 financial-pragmatic-ai-backend
+```
+
+Health check command:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Version check command:
+
+```bash
+curl http://localhost:8000/version
+```
+
+Docker behavior notes:
+
+- The image runs the canonical backend entrypoint: `api.server:app`.
+- The image targets `linux/amd64` because the pinned `torch==2.2.2+cpu` wheel is not available for Linux ARM64.
+- The container binds Uvicorn to `0.0.0.0`.
+- The container uses `${PORT:-8000}` so managed hosts can inject a port.
+- Docker build should not trigger model loading.
+- `GET /health` should stay lightweight and must not load model artifacts.
+- The first real `/analyze` request may download Hugging Face model artifacts.
+- The backend API image excludes local dataset, training, testing, and generated evaluation artifacts. It keeps evaluation utility source because current model modules import a helper from `financial_pragmatic_ai.evaluation.better_than_fin.utils`.
+
 ## Known Deployment Risks
 
 - The backend imports the ML stack at app import time, but model inference objects are lazily instantiated only when analysis runs.
@@ -92,7 +129,8 @@ Recommended Railway backend settings:
 
 ## Current Limitations
 
-- No Dockerfile or container orchestration file is present.
+- Backend Dockerfile is present at `backend/Dockerfile`.
+- No multi-service container orchestration file is present.
 - No CI workflow was detected in this pass.
 - No production frontend host configuration was detected.
 - No Supabase schema/migration file is present for the `analyses` table.

@@ -18,6 +18,7 @@ This document reflects the **current code in the repository**. Nothing below is 
 - `backend/financial_pragmatic_ai/api/server.py` is legacy and should not be extended.
 - Model training and model-behavior work are frozen for now unless required for deployment stability.
 - Current priority: deployment clarity, reproducibility, and containerization readiness.
+- Backend Docker image support is for `backend/api/server.py` only; do not point containers at the legacy API module.
 
 ---
 
