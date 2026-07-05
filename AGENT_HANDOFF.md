@@ -19,6 +19,7 @@ This document reflects the **current code in the repository**. Nothing below is 
 - Model training and model-behavior work are frozen for now unless required for deployment stability.
 - Current priority: deployment clarity, reproducibility, and containerization readiness.
 - Backend Docker image support is for `backend/api/server.py` only; do not point containers at the legacy API module.
+- Railway backend deployment guide exists at `docs/RAILWAY_BACKEND_DEPLOYMENT.md`; Railway should deploy the Dockerized canonical backend image only.
 
 ---
 

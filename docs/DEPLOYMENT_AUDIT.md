@@ -69,15 +69,32 @@ Detected deployment clue:
 
 - `backend/runtime.txt` pins Python to `python-3.11.9`.
 
-No dedicated Railway configuration file was found in the repo during this pass.
+Sprint 3 Railway deployment guide:
+
+- See `docs/RAILWAY_BACKEND_DEPLOYMENT.md`.
+
+Recommended Railway backend deployment path:
+
+- Use Docker, not Nixpacks/Railpack, for the backend service.
+- Service root/source directory: `backend`
+- Dockerfile path from service root: `Dockerfile`
+- Railway config file from service root: `railway.json`
+- Health check path: `/health`
 
 Recommended Railway backend settings:
 
 - Root directory: `backend`
-- Install command: `pip install -r requirements.txt`
-- Start command: `uvicorn api.server:app --host 0.0.0.0 --port $PORT`
-- Python runtime: keep `python-3.11.9`
+- Builder: Dockerfile
+- Dockerfile path: `Dockerfile`
+- Start command: use the Dockerfile `CMD`
 - Ensure outbound network access is available for Hugging Face model downloads.
+
+Validate deployed backend with:
+
+```bash
+curl https://YOUR-RAILWAY-BACKEND-DOMAIN/health
+curl https://YOUR-RAILWAY-BACKEND-DOMAIN/version
+```
 
 ## Docker Notes
 
@@ -139,7 +156,7 @@ Docker behavior notes:
 
 ## Next Recommended Deployment Steps
 
-1. Add a backend deployment config or README section with the exact Railway service settings.
+1. Create the Railway backend service using `docs/RAILWAY_BACKEND_DEPLOYMENT.md`.
 2. Decide the frontend host target, such as Vercel, Netlify, or Railway static hosting.
 3. Add a Supabase setup note or SQL schema for the `analyses` table.
 4. Confirm `GET /health` works in the deployed backend before testing `/analyze`.
