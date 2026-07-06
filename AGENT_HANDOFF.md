@@ -20,6 +20,7 @@ This document reflects the **current code in the repository**. Nothing below is 
 - Current priority: deployment clarity, reproducibility, and containerization readiness.
 - Backend Docker image support is for `backend/api/server.py` only; do not point containers at the legacy API module.
 - Railway backend deployment guide exists at `docs/RAILWAY_BACKEND_DEPLOYMENT.md`; Railway should deploy the Dockerized canonical backend image only.
+- Hugging Face Spaces is now the preferred free backend deployment target; the Dockerized backend supports Space-style port `7860`, while Railway docs remain available but are not the current free-tier priority.
 
 ---
 

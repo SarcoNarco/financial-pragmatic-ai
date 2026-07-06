@@ -42,10 +42,10 @@ Do not create a Railway service from the repo root unless you also adjust the Do
 The container command is defined in `backend/Dockerfile`:
 
 ```bash
-uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-8000}
+uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-7860}
 ```
 
-Railway should inject `PORT`. If it does not, the container falls back to `8000`.
+Railway should inject `PORT`. If it does not, the container falls back to `7860` for Hugging Face Spaces compatibility.
 
 No separate Railway start command is required.
 

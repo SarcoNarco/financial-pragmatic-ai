@@ -107,19 +107,19 @@ docker build --platform linux/amd64 -t financial-pragmatic-ai-backend ./backend
 Backend container run command:
 
 ```bash
-docker run --rm -p 8000:8000 financial-pragmatic-ai-backend
+docker run --rm -p 7860:7860 -e PORT=7860 financial-pragmatic-ai-backend
 ```
 
 Health check command:
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:7860/health
 ```
 
 Version check command:
 
 ```bash
-curl http://localhost:8000/version
+curl http://localhost:7860/version
 ```
 
 Docker behavior notes:
@@ -127,11 +127,33 @@ Docker behavior notes:
 - The image runs the canonical backend entrypoint: `api.server:app`.
 - The image targets `linux/amd64` because the pinned `torch==2.2.2+cpu` wheel is not available for Linux ARM64.
 - The container binds Uvicorn to `0.0.0.0`.
-- The container uses `${PORT:-8000}` so managed hosts can inject a port.
+- The container uses `${PORT:-7860}` so Hugging Face Spaces works by default and managed hosts can inject a different port.
 - Docker build should not trigger model loading.
 - `GET /health` should stay lightweight and must not load model artifacts.
 - The first real `/analyze` request may download Hugging Face model artifacts.
 - The backend API image excludes local dataset, training, testing, and generated evaluation artifacts. It keeps evaluation utility source because current model modules import a helper from `financial_pragmatic_ai.evaluation.better_than_fin.utils`.
+
+## Hugging Face Spaces Notes
+
+Hugging Face Spaces is the recommended free and ML-native backend deployment option for the portfolio demo.
+
+- See `docs/HUGGINGFACE_SPACES_DEPLOYMENT.md`.
+- Space SDK: Docker
+- Space app port: `7860`
+- Initial hardware: CPU Basic
+- Visibility: Public for portfolio demo
+- Space README template: `deployment/huggingface/README.md`
+- Space packaging helper: `scripts/prepare_hf_space_backend.sh`
+
+The backend should bind to `0.0.0.0` and run with `PORT=7860` on Spaces.
+
+After deployment, configure `frontend_v2` with:
+
+```text
+VITE_API_BASE_URL=https://sarconarco-financial-pragmatic-ai-backend.hf.space
+```
+
+Railway remains documented in `docs/RAILWAY_BACKEND_DEPLOYMENT.md`, but Hugging Face Spaces is currently the preferred free-tier backend deployment target.
 
 ## Known Deployment Risks
 
@@ -156,7 +178,7 @@ Docker behavior notes:
 
 ## Next Recommended Deployment Steps
 
-1. Create the Railway backend service using `docs/RAILWAY_BACKEND_DEPLOYMENT.md`.
+1. Create the Hugging Face Space backend using `docs/HUGGINGFACE_SPACES_DEPLOYMENT.md`.
 2. Decide the frontend host target, such as Vercel, Netlify, or Railway static hosting.
 3. Add a Supabase setup note or SQL schema for the `analyses` table.
 4. Confirm `GET /health` works in the deployed backend before testing `/analyze`.
