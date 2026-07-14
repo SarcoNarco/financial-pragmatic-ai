@@ -1,6 +1,6 @@
 # Railway Backend Deployment
 
-This guide deploys the canonical backend only.
+This guide deploys the canonical backend only. Railway is the primary backend deployment target for the portfolio demo.
 
 ## Canonical Service
 
@@ -42,10 +42,10 @@ Do not create a Railway service from the repo root unless you also adjust the Do
 The container command is defined in `backend/Dockerfile`:
 
 ```bash
-uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-7860}
+uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
-Railway should inject `PORT`. If it does not, the container falls back to `7860` for Hugging Face Spaces compatibility.
+Railway should inject `PORT`. If it does not, the container falls back to `8000` for local Docker friendliness.
 
 No separate Railway start command is required.
 
@@ -67,6 +67,7 @@ Notes:
 - `PORT` is normally injected by Railway.
 - `HF_HOME` defaults to `/tmp/hf_cache` in `backend/api/server.py` and in the Docker image.
 - No fake secrets are required for the backend service.
+- Supabase remains the auth/history database for `frontend_v2`; do not add a Railway database for this backend unless the architecture intentionally changes.
 
 ## Health and Version Checks
 
@@ -91,6 +92,35 @@ Expected `/version` response:
 
 `GET /health` is intentionally lightweight and must not load model artifacts.
 
+## Cost Control for Hobby Plan
+
+Keep the Railway deployment lean:
+
+- Set the lowest available usage limit/alerts Railway allows in your workspace.
+- Keep only one backend service running for this project.
+- Use one replica.
+- Do not add a Railway database; Supabase remains the auth/history database.
+- Do not add a Railway volume unless a later sprint proves persistent backend storage is needed.
+- Host `frontend_v2` separately on a free frontend host such as Vercel or Netlify.
+- Use `GET /health` and `GET /version` for deploy validation.
+- Do not run repeated `/analyze` load tests during deployment; the first model load can be slow and resource-heavy.
+- Watch Railway memory and CPU metrics after the first real inference.
+- If usage spikes unexpectedly, pause or remove the Railway service while investigating.
+
+## Image Size Notes
+
+The backend Docker image is expected to be large because it includes PyTorch, Transformers, Pandas, Datasets, and PDF parsing dependencies.
+
+Current priority is deployment correctness. Do not change dependencies in this sprint unless the change is obviously safe.
+
+Possible future optimizations:
+
+- Avoid copying unused folders into the Docker build context.
+- Continue using CPU-only PyTorch wheels where possible.
+- Prebuild and publish the image externally if Railway builds struggle.
+- Move toward a smaller inference runtime only if it is safe for the frozen model behavior.
+- Keep datasets, generated reports, and model binaries out of the image.
+
 ## Model Download Behavior
 
 The Docker image does not include model weight files.
@@ -101,6 +131,7 @@ At runtime:
 - Model artifacts download from Hugging Face at runtime.
 - The deployed service must allow outbound network access.
 - `GET /health` and `GET /version` should work before any model download.
+- Avoid repeatedly testing `/analyze` while stabilizing deployment on Railway Hobby.
 
 ## Local Verification Before Deploying
 

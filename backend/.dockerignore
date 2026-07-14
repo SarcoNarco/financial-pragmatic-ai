@@ -32,6 +32,7 @@ financial_pragmatic_ai/evaluation/awt_report_assets/
 financial_pragmatic_ai/evaluation/finbert_intent_v3_eval/
 financial_pragmatic_ai/evaluation/paper_docx_assets/
 financial_pragmatic_ai/evaluation/better_than_fin/results/
+financial_pragmatic_ai/evaluation/generate_awt_frontend_v2_report.py
 financial_pragmatic_ai/evaluation/awt_frontend_v2_report.docx
 financial_pragmatic_ai/evaluation/awt_frontend_v2_ieee_report.html
 financial_pragmatic_ai/evaluation/awt_frontend_v2_ieee_report.pdf

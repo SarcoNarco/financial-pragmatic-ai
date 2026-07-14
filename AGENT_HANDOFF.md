@@ -19,8 +19,9 @@ This document reflects the **current code in the repository**. Nothing below is 
 - Model training and model-behavior work are frozen for now unless required for deployment stability.
 - Current priority: deployment clarity, reproducibility, and containerization readiness.
 - Backend Docker image support is for `backend/api/server.py` only; do not point containers at the legacy API module.
-- Railway backend deployment guide exists at `docs/RAILWAY_BACKEND_DEPLOYMENT.md`; Railway should deploy the Dockerized canonical backend image only.
-- Hugging Face Spaces is now the preferred free backend deployment target; the Dockerized backend supports Space-style port `7860`, while Railway docs remain available but are not the current free-tier priority.
+- Railway is the primary backend deployment target; Railway should deploy the Dockerized canonical backend image only.
+- Railway Hobby should stay lean: one backend service, one replica, no Railway database or volume unless explicitly needed, frontend hosted separately, and Supabase remains the auth/history database.
+- Hugging Face Spaces docs remain available as an optional fallback only; they are not the active deployment priority.
 
 ---
 

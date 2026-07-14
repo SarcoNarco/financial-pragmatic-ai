@@ -1,24 +1,24 @@
 # Hugging Face Spaces Backend Deployment
 
-Hugging Face Spaces is the preferred free and ML-native deployment target for the Financial Pragmatic AI backend demo.
+Hugging Face Spaces is an optional fallback deployment path for the Financial Pragmatic AI backend demo. Railway is currently the primary backend deployment target.
 
 Spaces is a good fit because:
 
 - It supports Docker SDK apps for custom FastAPI services.
 - It is designed for ML demos and Hugging Face-hosted model artifacts.
 - It provides a public portfolio URL with minimal infrastructure work.
-- It can sleep or cold start, which is acceptable for a free demo backend.
+- It can sleep or cold start, which may be acceptable for a fallback demo backend.
 
 ## Canonical Backend
 
 - Canonical backend entrypoint: `backend/api/server.py`
-- Docker runtime command: `uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-7860}`
+- Docker runtime command: `uvicorn api.server:app --host 0.0.0.0 --port ${PORT:-8000}`
 - Legacy backend API: `backend/financial_pragmatic_ai/api/server.py`
   - Do not deploy or extend this legacy module.
 
 ## Recommended Space Settings
 
-Create a new Hugging Face Space with:
+If using the fallback Hugging Face Space path, create a Space with:
 
 - Owner: `SarcoNarco`
 - Space name: `financial-pragmatic-ai-backend`
@@ -110,7 +110,7 @@ Expected `/version` response:
 
 ## Frontend V2 Configuration
 
-After the Space is deployed, configure `frontend_v2` with:
+If the fallback Space is deployed, configure `frontend_v2` with:
 
 ```text
 VITE_API_BASE_URL=https://sarconarco-financial-pragmatic-ai-backend.hf.space
@@ -120,7 +120,7 @@ Then rebuild/redeploy the frontend so it calls the Space backend.
 
 ## Runtime Behavior
 
-- Hugging Face Spaces should inject `PORT`, but the backend defaults to `7860`.
+- Hugging Face Spaces should run with `PORT=7860`; the Dockerfile defaults to `8000` for Railway/local use.
 - The container must bind to `0.0.0.0`.
 - Model artifacts download from Hugging Face at runtime.
 - The first `/analyze` request may be slow.
@@ -140,7 +140,7 @@ Confirm:
 - README frontmatter has `sdk: docker`.
 - README frontmatter has `app_port: 7860`.
 - Docker command binds to `0.0.0.0`.
-- The app runs on `${PORT:-7860}`.
+- The app runs with `PORT=7860` on Spaces.
 
 ### Model Download Is Slow
 

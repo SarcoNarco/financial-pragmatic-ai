@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOT_DIR}/dist/hf-space-backend"
 
-echo "Preparing Hugging Face Space backend package..."
+echo "Preparing optional Hugging Face Space backend fallback package..."
 echo "Output: ${OUT_DIR}"
 
 rm -rf "${OUT_DIR}"
@@ -29,6 +29,7 @@ rsync -a \
   --exclude='data/' \
   --exclude='testing/' \
   --exclude='training/' \
+  --exclude='evaluation/generate_awt_frontend_v2_report.py' \
   --exclude='evaluation/*.docx' \
   --exclude='evaluation/*.html' \
   --exclude='evaluation/*.pdf' \
@@ -44,7 +45,7 @@ rsync -a \
 
 cat <<EOF
 
-Hugging Face Space backend package is ready:
+Optional Hugging Face Space backend fallback package is ready:
   ${OUT_DIR}
 
 Next steps:
