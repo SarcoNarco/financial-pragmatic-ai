@@ -120,10 +120,10 @@ def load_conversation_attention_model(
     device: torch.device | None = None,
 ):
     resolved_device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ConversationAttentionModel(input_size=input_size).to(resolved_device)
     path = Path(model_path)
     if not path.exists():
         return None
+    model = ConversationAttentionModel(input_size=input_size).to(resolved_device)
     state_dict = torch.load(path, map_location=resolved_device)
     model.load_state_dict(state_dict)
     model.eval()

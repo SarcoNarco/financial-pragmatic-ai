@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 from collections import Counter
 import threading
+from time import perf_counter
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -104,21 +105,21 @@ def _correct_intent(text: str, intent: str, confidence: float) -> str:
     if has_pct and _GROWTH_WORDS.search(text) and confidence <= _HIGH_CONFIDENCE:
         new_intent = "EXPANSION"
         if new_intent != intent:
-            logger.debug("Corrected intent %s -> %s text=%s", intent, new_intent, text[:60])
+            logger.debug("Corrected intent %s -> %s", intent, new_intent)
         return new_intent
 
     # Rule 2 — numeric decline signal
     if has_pct and _DECLINE_WORDS.search(text) and confidence <= _HIGH_CONFIDENCE:
         new_intent = "COST_PRESSURE"
         if new_intent != intent:
-            logger.debug("Corrected intent %s -> %s text=%s", intent, new_intent, text[:60])
+            logger.debug("Corrected intent %s -> %s", intent, new_intent)
         return new_intent
 
     # Rule 3 — soft cost bias (low-confidence model only)
     if _COST_WORDS.search(text) and confidence < _LOW_CONFIDENCE:
         new_intent = "COST_PRESSURE"
         if new_intent != intent:
-            logger.debug("Corrected intent %s -> %s text=%s", intent, new_intent, text[:60])
+            logger.debug("Corrected intent %s -> %s", intent, new_intent)
         return new_intent
 
     return intent
@@ -199,6 +200,7 @@ class TranscriptAnalyzer:
         self._fallback_load_timeout_seconds = _FALLBACK_LOAD_TIMEOUT_SECONDS
         self._last_fallback_used = False
         self._last_embeddings = []
+        self._last_prediction_mode = "uninitialized"
 
         try:
             self.intent_model = FinBERTIntentModel(device=device)
@@ -398,25 +400,26 @@ class TranscriptAnalyzer:
 
         return segments
 
-    def predict_intent(self, text, speaker):
-        if self.intent_model is not None:
-            try:
-                output = self.intent_model.predict(text)
-                raw_intent = output["intent"]
-                confidence = float(output.get("confidence", 0.0))
-                intent = _correct_intent(text, raw_intent, confidence)
-                cls_embedding = output["embedding"].float()
-                final_embedding = torch.cat([cls_embedding, _speaker_vector(speaker)], dim=-1)
-                return {
-                    "intent": intent,
-                    "logits": output["logits"],
-                    "embedding": final_embedding,
-                    "confidence": confidence,
-                    "fallback_used": False,
-                }
-            except Exception:
-                logger.error("FinBERT intent inference failed; trying fallback.", exc_info=True)
+    @staticmethod
+    def _format_primary_prediction(output, text, speaker):
+        raw_intent = output["intent"]
+        confidence = float(output.get("confidence", 0.0))
+        intent = _correct_intent(text, raw_intent, confidence)
+        cls_embedding = output.get("embedding")
+        final_embedding = (
+            torch.cat([cls_embedding.float(), _speaker_vector(speaker)], dim=-1)
+            if cls_embedding is not None
+            else None
+        )
+        return {
+            "intent": intent,
+            "logits": output["logits"],
+            "embedding": final_embedding,
+            "confidence": confidence,
+            "fallback_used": False,
+        }
 
+    def _predict_fallback_intent(self, text, speaker):
         if self.fallback_intent_model is not None or self._ensure_fallback_model_loaded():
             try:
                 raw_intent = self.fallback_intent_model.predict(
@@ -435,7 +438,6 @@ class TranscriptAnalyzer:
             raw_intent = "GENERAL_UPDATE"
             fallback_used = False
 
-        # Fallback path: confidence unknown — apply correction with neutral confidence
         intent = _correct_intent(text, raw_intent, confidence=0.5)
         fallback_embedding = torch.cat(
             [torch.zeros(768, dtype=torch.float32), _speaker_vector(speaker)],
@@ -448,6 +450,39 @@ class TranscriptAnalyzer:
             "confidence": 0.5,
             "fallback_used": fallback_used,
         }
+
+    def predict_intent(self, text, speaker):
+        if self.intent_model is not None:
+            try:
+                output = self.intent_model.predict(text)
+                return self._format_primary_prediction(output, text, speaker)
+            except Exception:
+                logger.error("FinBERT intent inference failed; trying fallback.", exc_info=True)
+
+        return self._predict_fallback_intent(text, speaker)
+
+    def predict_intents(self, segments):
+        if self.intent_model is not None:
+            try:
+                outputs = self.intent_model.predict_batch(
+                    [segment["text"] for segment in segments],
+                    include_embeddings=self.conversation_model is not None,
+                )
+                if len(outputs) != len(segments):
+                    raise RuntimeError("Batch prediction count did not match segment count")
+                self._last_prediction_mode = "batch"
+                return [
+                    self._format_primary_prediction(output, segment["text"], segment["speaker"])
+                    for output, segment in zip(outputs, segments)
+                ]
+            except Exception:
+                logger.error("FinBERT batch inference failed; trying fallback.", exc_info=True)
+
+        self._last_prediction_mode = "fallback"
+        return [
+            self._predict_fallback_intent(segment["text"], segment["speaker"])
+            for segment in segments
+        ]
 
     def predict_conversation_signal(self, intents):
         if (
@@ -465,15 +500,21 @@ class TranscriptAnalyzer:
         return derive_signal(score)
 
     def analyze(self, raw_text):
-        logger.info("Transcript analysis request started.")
+        parsing_started = perf_counter()
         segments = self._build_segments(raw_text)
-        logger.debug("Parsed %s segments.", len(segments))
+        logger.info(
+            "timing stage=transcript_parsing duration_ms=%.1f transcript_chars=%s segments=%s",
+            (perf_counter() - parsing_started) * 1000,
+            len(raw_text),
+            len(segments),
+        )
         results = []
         embeddings = []
         fallback_used = False
 
-        for seg in segments:
-            prediction = self.predict_intent(seg["text"], seg["speaker"])
+        prediction_started = perf_counter()
+        predictions = self.predict_intents(segments)
+        for seg, prediction in zip(segments, predictions):
             intent = prediction["intent"]
             logger.debug("Model intent=%s speaker=%s", intent, seg["speaker"])
             fallback_used = fallback_used or bool(prediction.get("fallback_used", False))
@@ -483,15 +524,20 @@ class TranscriptAnalyzer:
                 "text": seg["text"],
                 "intent": intent,
             })
-            embeddings.append(prediction["embedding"])
+            if prediction["embedding"] is not None:
+                embeddings.append(prediction["embedding"])
+
+        logger.info(
+            "timing stage=intent_prediction duration_ms=%.1f segments=%s mode=%s",
+            (perf_counter() - prediction_started) * 1000,
+            len(segments),
+            self._last_prediction_mode,
+        )
 
         # results = smooth_intents(results)
         self._last_embeddings = embeddings[: len(results)]
         self._last_fallback_used = fallback_used
 
-        logger.debug("Sample output:")
-        for result in results[:5]:
-            logger.debug("%s", result)
         intent_distribution = Counter(result["intent"] for result in results)
         logger.debug("Intent distribution=%s", dict(intent_distribution))
 

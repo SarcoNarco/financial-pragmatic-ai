@@ -60,12 +60,14 @@ Optional backend environment variables:
 ```text
 PORT=8000
 HF_HOME=/tmp/hf_cache
+MAX_TRANSCRIPT_CHARS=20000
 ```
 
 Notes:
 
 - `PORT` is normally injected by Railway.
 - `HF_HOME` defaults to `/tmp/hf_cache` in `backend/api/server.py` and in the Docker image.
+- `MAX_TRANSCRIPT_CHARS` defaults to `20000`; requests above the configured limit return HTTP 413 before model initialization or inference.
 - No fake secrets are required for the backend service.
 - Supabase remains the auth/history database for `frontend_v2`; do not add a Railway database for this backend unless the architecture intentionally changes.
 
@@ -90,7 +92,7 @@ Expected `/version` response:
 {"app":"financial-pragmatic-ai-api","api_entrypoint":"backend/api/server.py","model":"SarcoNarco/finbert_intent_v3","status":"portfolio-hardening"}
 ```
 
-`GET /health` is intentionally lightweight and must not load model artifacts.
+`GET /health` and `GET /version` are intentionally lightweight and must not load model artifacts. `POST /analyze` is the expensive path because it lazily loads and runs the intent model.
 
 ## Cost Control for Hobby Plan
 
@@ -105,6 +107,7 @@ Keep the Railway deployment lean:
 - Use `GET /health` and `GET /version` for deploy validation.
 - Do not run repeated `/analyze` load tests during deployment; the first model load can be slow and resource-heavy.
 - Watch Railway memory and CPU metrics after the first real inference.
+- Start real demo inference at 2 vCPU / 4 GB, keep one replica, and adjust only after observing CPU and memory during the first analysis.
 - If usage spikes unexpectedly, pause or remove the Railway service while investigating.
 
 ## Image Size Notes
@@ -148,6 +151,13 @@ In another shell:
 curl http://localhost:8000/health
 curl http://localhost:8000/version
 BASE_URL=http://localhost:8000 python backend/scripts/smoke_backend.py
+BASE_URL=http://localhost:8000 python backend/scripts/benchmark_analyze.py
+```
+
+The benchmark script sends exactly one tiny `/analyze` request and prints elapsed seconds plus the key response fields. Against Railway, run:
+
+```bash
+BASE_URL=https://YOUR-RAILWAY-BACKEND-DOMAIN python backend/scripts/benchmark_analyze.py
 ```
 
 On Apple Silicon, Docker may print an expected platform warning because the image targets `linux/amd64` for compatibility with the pinned CPU PyTorch wheel.
@@ -191,6 +201,12 @@ Confirm Railway is injecting `PORT` and that `/health` is configured as the heal
 ### First analysis request is slow
 
 This can be expected on a fresh deployment because model artifacts are downloaded from Hugging Face on first inference path use.
+
+Check the `timing stage=...` log lines to separate analyzer initialization, parsing, batched intent prediction, scoring, driver extraction, timeline generation, and total request time. Avoid repeated load tests; run one benchmark, then inspect Railway CPU and memory. For the portfolio demo, begin with 2 vCPU / 4 GB and one replica.
+
+### Analysis request returns HTTP 413
+
+The transcript exceeded `MAX_TRANSCRIPT_CHARS`, which defaults to `20000`. Raise the limit only when the deployment has enough CPU, memory, and request-time budget for larger transcripts.
 
 ### Hugging Face download fails
 

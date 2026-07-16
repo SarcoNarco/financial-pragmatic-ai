@@ -1,4 +1,8 @@
+import logging
 import statistics
+
+
+logger = logging.getLogger(__name__)
 
 
 INTENT_TO_SIGNAL = {
@@ -19,21 +23,17 @@ INTENT_TO_SCORE = {
 
 def compute_risk_score(intents):
     if not intents:
-        print("INTENTS:", intents)
-        print("SCORE:", 0.0)
+        logger.debug("Risk score computed segments=0 score=0.0")
         return 0.0
 
     score_sum = 0.0
-    mapped_intents = []
     for item in intents:
         intent = str(item.get("intent", "GENERAL_UPDATE")).upper()
         value = INTENT_TO_SCORE.get(intent, 0.0)
-        mapped_intents.append({"intent": intent, "value": value})
         score_sum += value
 
     score = score_sum / float(len(intents))
-    print("INTENTS:", mapped_intents)
-    print("SCORE:", score)
+    logger.debug("Risk score computed segments=%s score=%s", len(intents), score)
     return float(score)
 
 
@@ -45,8 +45,7 @@ def derive_signal(score):
     else:
         signal = "neutral"
 
-    print("FINAL SCORE:", score)
-    print("FINAL SIGNAL:", signal)
+    logger.debug("Signal derived score=%s signal=%s", score, signal)
     return signal
 
 
@@ -73,16 +72,16 @@ def generate_insight(score, intents):
     if total == 0:
         return "No interpretable signals were detected in the discussion."
 
-    if score <= 35:
-        if expansion >= cost:
+    if score > 0.2:
+        if expansion > 0 and expansion >= cost:
             return (
                 "Strong growth signals driven by expansion-heavy management commentary "
                 "with limited cost pressure signals."
             )
         return "Growth-oriented messaging appears present but mixed with cost-related caution."
 
-    if score >= 65:
-        if cost > expansion:
+    if score < -0.2:
+        if cost > 0 and cost > expansion:
             return (
                 "Elevated risk profile led by persistent cost and margin pressure signals "
                 "across management commentary."

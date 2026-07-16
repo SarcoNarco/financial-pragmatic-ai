@@ -22,6 +22,7 @@ This document reflects the **current code in the repository**. Nothing below is 
 - Railway is the primary backend deployment target; Railway should deploy the Dockerized canonical backend image only.
 - Railway Hobby should stay lean: one backend service, one replica, no Railway database or volume unless explicitly needed, frontend hosted separately, and Supabase remains the auth/history database.
 - Hugging Face Spaces docs remain available as an optional fallback only; they are not the active deployment priority.
+- Sprint 6 hardens `/analyze` with batched intent inference, production timing logs, a transcript-size guardrail, a one-request benchmark script, and signal-consistent insight text.
 
 ---
 

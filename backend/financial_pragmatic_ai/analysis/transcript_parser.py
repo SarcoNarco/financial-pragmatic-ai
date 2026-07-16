@@ -1,4 +1,8 @@
+import logging
 import re
+
+
+logger = logging.getLogger(__name__)
 
 
 COMMON_EXECUTIVE_KEYWORDS = [
@@ -190,6 +194,6 @@ def parse_transcript(text: str):
             "text": block["text"]
         })
 
-    print(f"[DEBUG] Parsed {len(segments)} segments")
+    logger.debug("Parsed segments=%s", len(segments))
 
     return segments

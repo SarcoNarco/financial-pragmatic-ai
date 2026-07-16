@@ -34,6 +34,7 @@ Backend:
 
 - No backend environment variables are required for local startup at this time.
 - `HF_HOME` is set in `backend/api/server.py` with a default of `/tmp/hf_cache`.
+- `MAX_TRANSCRIPT_CHARS` is optional and defaults to `20000` for deployed request guardrails.
 - Model artifacts are downloaded from Hugging Face at runtime.
 
 Frontend V2:
@@ -94,6 +95,7 @@ Recommended Railway backend settings:
 - Supabase remains the auth/history database.
 - Ensure outbound network access is available for Hugging Face model downloads.
 - Use `/health` and `/version` for deployment checks. Avoid repeated `/analyze` load tests during deployment because first model load can be slow and resource-heavy.
+- Use `backend/scripts/benchmark_analyze.py` for a single timed `/analyze` check; start demo inference at 2 vCPU / 4 GB with one replica.
 
 Validate deployed backend with:
 

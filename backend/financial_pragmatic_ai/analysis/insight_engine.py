@@ -13,7 +13,11 @@ Pipeline per segment:
     → cap at limit
 """
 
+import logging
 import re
+
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Keyword sets
@@ -231,8 +235,11 @@ def extract_key_drivers(results, limit: int = 4) -> dict[str, list[str]]:
     growth = _semantic_dedup(growth_raw)[:limit]
     risk = _semantic_dedup(risk_raw)[:limit]
 
-    print("CLEAN GROWTH DRIVERS:", growth)
-    print("CLEAN RISK DRIVERS:", risk)
+    logger.debug(
+        "Driver extraction complete growth_count=%s risk_count=%s",
+        len(growth),
+        len(risk),
+    )
 
     return {
         "growth_drivers": growth,

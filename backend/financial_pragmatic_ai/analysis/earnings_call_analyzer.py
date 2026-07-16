@@ -24,9 +24,16 @@ class EarningsCallAnalyzer:
             "signal_counts": signal_counts,
         }
 
-    def analyze(self, transcript):
+    def analyze(self, transcript, include_details=True):
         segments = self.transcript_analyzer.analyze(transcript)
         fallback_used = bool(getattr(self.transcript_analyzer, "last_fallback_used", False))
+
+        if not include_details:
+            return {
+                "segments": segments,
+                "fallback_used": fallback_used,
+            }
+
         model_signal = (
             self.transcript_analyzer.predict_conversation_signal(segments)
             if segments

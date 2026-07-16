@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import string
 from pathlib import Path
@@ -16,6 +17,8 @@ from transformers import (
 )
 from financial_pragmatic_ai.evaluation.better_than_fin.utils import build_ground_truth_signals
 
+
+logger = logging.getLogger(__name__)
 
 MODEL_NAME = "yiyanghkust/finbert-tone"
 HF_INTENT_REPO = "SarcoNarco/finbert_intent_v3"
@@ -293,17 +296,17 @@ class FinBERTIntentModel:
         device: torch.device | None = None,
     ):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"[INFO] Loading FinBERT intent model from HuggingFace: {HF_INTENT_REPO}")
+        logger.info("Loading FinBERT intent model repo=%s", HF_INTENT_REPO)
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(HF_INTENT_REPO)
             self.model = AutoModelForSequenceClassification.from_pretrained(HF_INTENT_REPO)
-        except Exception as exc:
-            print(f"[ERROR] Failed to load FinBERT intent model from HuggingFace: {exc}")
+        except Exception:
+            logger.error("Failed to load FinBERT intent model repo=%s", HF_INTENT_REPO, exc_info=True)
             raise
 
         self.model.to(self.device)
         self.model.eval()
-        print(f"[INFO] Loaded FinBERT intent model num_labels={self.model.config.num_labels}")
+        logger.info("Loaded FinBERT intent model num_labels=%s", self.model.config.num_labels)
 
     def save_pretrained(self, output_dir: Path | str = DEFAULT_MODEL_DIR):
         target = Path(output_dir)
@@ -312,10 +315,21 @@ class FinBERTIntentModel:
         self.tokenizer.save_pretrained(target)
 
     def predict(self, text: str, max_length: int = 128):
+        return self.predict_batch([text], max_length=max_length)[0]
+
+    def predict_batch(
+        self,
+        texts: list[str],
+        max_length: int = 128,
+        include_embeddings: bool = True,
+    ) -> list[dict]:
+        if not texts:
+            return []
+
         encoded = self.tokenizer(
-            text,
+            texts,
             truncation=True,
-            padding="max_length",
+            padding=True,
             max_length=max_length,
             return_tensors="pt",
         )
@@ -324,32 +338,32 @@ class FinBERTIntentModel:
         with torch.no_grad():
             outputs = self.model(
                 **encoded,
-                output_hidden_states=True,
+                output_hidden_states=include_embeddings,
                 return_dict=True,
             )
-            logits = outputs.logits.squeeze(0)
-            cls_embedding = outputs.hidden_states[-1][:, 0, :].squeeze(0)
+            logits_batch = outputs.logits.detach().cpu()
+            embeddings_batch = (
+                outputs.hidden_states[-1][:, 0, :].detach().cpu().float()
+                if include_embeddings
+                else None
+            )
 
-        logits_cpu = logits.detach().cpu()
-        probs = torch.softmax(logits_cpu, dim=-1)
-        pred_class = int(torch.argmax(probs).item())
-        label_map = {
-            0: "EXPANSION",
-            1: "COST_PRESSURE",
-            2: "STRATEGIC_PROBING",
-            3: "GENERAL_UPDATE",
-        }
-        intent = label_map.get(pred_class, "GENERAL_UPDATE")
-        print("LOGITS:", logits_cpu.tolist())
-        print("PRED CLASS:", pred_class)
-        print(f"[DEBUG] CLASS → INTENT: {pred_class} → {intent}")
+        probabilities = torch.softmax(logits_batch, dim=-1)
+        predicted_classes = torch.argmax(probabilities, dim=-1)
+        results = []
 
-        return {
-            "intent": intent,
-            "logits": logits_cpu,
-            "embedding": cls_embedding.detach().cpu().float(),
-            "confidence": float(probs[pred_class].item()),
-        }
+        for index, pred_tensor in enumerate(predicted_classes):
+            pred_class = int(pred_tensor.item())
+            intent = ID2LABEL.get(pred_class, "GENERAL_UPDATE")
+            logger.debug("FinBERT prediction class=%s intent=%s", pred_class, intent)
+            results.append({
+                "intent": intent,
+                "logits": logits_batch[index],
+                "embedding": embeddings_batch[index] if embeddings_batch is not None else None,
+                "confidence": float(probabilities[index, pred_class].item()),
+            })
+
+        return results
 
 
 def train_finbert_intent_model(
