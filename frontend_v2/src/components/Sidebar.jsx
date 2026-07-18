@@ -1,7 +1,7 @@
-import { Home, BarChart2, Settings, History, LogOut, Clock, ToggleLeft, ToggleRight } from "lucide-react";
+import { Home, BarChart2, Settings, History, LogOut, Clock } from "lucide-react";
 import { supabase } from "../supabaseClient";
 
-export default function Sidebar({ history, onHistoryClick, userEmail, compareMode, setCompareMode, compareA, setCompareA, compareB, setCompareB }) {
+export default function Sidebar({ history, onHistoryClick, userEmail, compareMode, compareA, setCompareA, compareB, setCompareB }) {
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
@@ -46,8 +46,13 @@ export default function Sidebar({ history, onHistoryClick, userEmail, compareMod
 
         <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
           {history.length === 0 ? (
-            <div className="p-4 text-center text-[#8b949e] text-xs italic">
-              No past analyses found.
+            <div className="mx-2 p-4 text-center text-[#8b949e] text-xs border border-dashed border-[#30363d] rounded">
+              <History size={18} className="mx-auto mb-2 text-blue-400/70" />
+              <div className="text-[#c9d1d9] mb-1">No saved analyses yet</div>
+              <div>
+                Run your first transcript analysis to build history
+                {compareMode ? " and unlock comparison." : "."}
+              </div>
             </div>
           ) : (
             history.map((item) => {

@@ -1,9 +1,8 @@
-import { useState } from "react";
 import Overview from "./Overview";
 import Insights from "./Insights";
 import Compare from "./Compare";
 
-export default function Tabs({ active, onTabChange, result, compareA, compareB, onClearCompare }) {
+export default function Tabs({ active, onTabChange, result, compareA, compareB, historyCount, onClearCompare }) {
 return ( <div className="transition-all duration-300"> <div className="flex border-b border-[#30363d] transition-all duration-300">
 {["overview", "insights", "compare"].map((tab) => (
 <button
@@ -21,7 +20,7 @@ className={`px-4 py-2 text-sm transition-all duration-300 ${
   <div className="p-4 transition-all duration-300">
     {active === "overview" && <Overview result={result} />}
     {active === "insights" && <Insights result={result} />}
-    {active === "compare" && <Compare compareA={compareA} compareB={compareB} onClearCompare={onClearCompare} />}
+    {active === "compare" && <Compare compareA={compareA} compareB={compareB} historyCount={historyCount} onClearCompare={onClearCompare} />}
   </div>
 </div>
 );

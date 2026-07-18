@@ -1,10 +1,21 @@
-import React from 'react';
-
-export default function Compare({ compareA, compareB, onClearCompare }) {
+export default function Compare({ compareA, compareB, historyCount = 0, onClearCompare }) {
   if (!compareA || !compareB) {
+    const hasOneSelection = Boolean(compareA || compareB);
+    const title = historyCount < 2
+      ? "Two saved analyses required"
+      : hasOneSelection
+        ? "One analysis selected"
+        : "Select two analyses";
+    const description = historyCount < 2
+      ? "Run and save at least two transcript analyses, then return to Compare."
+      : hasOneSelection
+        ? "Choose one more saved analysis from the sidebar."
+        : "Choose two saved analyses from the sidebar to compare their signals and drivers.";
+
     return (
-      <div className="text-[#8b949e] text-center p-8 bg-[rgba(22,27,34,0.6)] backdrop-blur-xl border border-[#30363d] rounded-lg">
-        Select 2 analyses from the sidebar to compare
+      <div className="text-center p-8 bg-[rgba(22,27,34,0.6)] backdrop-blur-xl border border-dashed border-[#30363d] rounded-lg">
+        <div className="text-[#c9d1d9] font-medium mb-2">{title}</div>
+        <div className="text-[#8b949e] text-sm">{description}</div>
       </div>
     );
   }
@@ -35,7 +46,7 @@ export default function Compare({ compareA, compareB, onClearCompare }) {
     return drivers.filter(d => /\d/.test(d) || d.split(" ").filter(w => w.trim().length > 0).length >= 3);
   };
 
-  const UnifiedDrivers = ({ title, color, titleColor, fieldA, fieldB }) => {
+  const UnifiedDrivers = ({ title, titleColor, fieldA, fieldB }) => {
     const a = fieldA || [];
     const b = fieldB || [];
     

@@ -44,6 +44,29 @@ Frontend V2:
 - `VITE_API_BASE_URL`
   - Local default: `http://localhost:8000`
 
+## Frontend Vercel Deployment
+
+`frontend_v2/` is the canonical frontend and should deploy to Vercel.
+
+- Vercel root directory: `frontend_v2`
+- Framework preset: Vite
+- Build command: `npm run build`
+- Output directory: `dist`
+- SPA routing config: `frontend_v2/vercel.json`
+- Deployment guide: `docs/FRONTEND_VERCEL_DEPLOYMENT.md`
+- Production backend: Railway at `https://financial-pragmatic-ai-production.up.railway.app`
+- Authentication and analysis history: Supabase
+
+Required Vercel build-time variables:
+
+```text
+VITE_API_BASE_URL=https://financial-pragmatic-ai-production.up.railway.app
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
+
+Changing a Vite environment variable requires a Vercel redeploy. The frontend checks the backend health endpoint once after authentication and allows up to 90 seconds for a single `/analyze` request without automatic retries.
+
 ## Backend API Surface
 
 Canonical backend endpoints:
@@ -179,7 +202,7 @@ Railway remains the primary backend deployment target.
 - Backend Dockerfile is present at `backend/Dockerfile`.
 - No multi-service container orchestration file is present.
 - No CI workflow was detected in this pass.
-- No production frontend host configuration was detected.
+- Vercel deployment configuration is present for `frontend_v2`.
 - No Supabase schema/migration file is present for the `analyses` table.
 - `frontend/` still exists as the older CRA app, but `frontend_v2/` is the portfolio canonical UI.
 - Model training and evaluation files are intentionally frozen for now.
@@ -187,7 +210,7 @@ Railway remains the primary backend deployment target.
 ## Next Recommended Deployment Steps
 
 1. Create the Railway backend service using `docs/RAILWAY_BACKEND_DEPLOYMENT.md`.
-2. Decide the frontend host target, such as Vercel, Netlify, or Railway static hosting.
+2. Deploy `frontend_v2` to Vercel using `docs/FRONTEND_VERCEL_DEPLOYMENT.md`.
 3. Add a Supabase setup note or SQL schema for the `analyses` table.
 4. Confirm `GET /health` works in the deployed backend before testing `/analyze`.
 5. Configure `VITE_API_BASE_URL` in the frontend host to point at the deployed backend base URL.
