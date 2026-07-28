@@ -95,7 +95,16 @@ function ZoneLabel({ viewBox, label, color }) {
 }
 
 export default function TimelineChart({ timeline: rawTimeline }) {
-  if (!rawTimeline || rawTimeline.length === 0) return null;
+  if (!Array.isArray(rawTimeline) || rawTimeline.length === 0) {
+    return (
+      <div className="bg-[rgba(22,27,34,0.6)] backdrop-blur-xl border border-[#30363d] p-4 rounded-lg mb-4">
+        <h2 className="mb-1 text-lg">Event Timeline</h2>
+        <p className="text-sm text-[#8b949e]">
+          No timeline events are available for this analysis.
+        </p>
+      </div>
+    );
+  }
 
   // Downsample data
   const stepSize = Math.max(1, Math.floor(rawTimeline.length / 100));

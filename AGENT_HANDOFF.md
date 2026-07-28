@@ -24,6 +24,7 @@ This document reflects the **current code in the repository**. Nothing below is 
 - Hugging Face Spaces docs remain available as an optional fallback only; they are not the active deployment priority.
 - Sprint 6 hardens `/analyze` with batched intent inference, production timing logs, a transcript-size guardrail, a one-request benchmark script, and signal-consistent insight text.
 - Sprint 7 prepares `frontend_v2` for Vercel and adds demo-focused backend status, 90-second request handling, elapsed-time loading feedback, sample transcript input, and clearer errors/empty states.
+- Sprint 8 fixes visible frontend demo polish: the timeline axis label is `Segment`, and distribution rows now use explicit, safe percentage handling.
 
 ---
 

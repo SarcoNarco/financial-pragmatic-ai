@@ -1,3 +1,9 @@
+function getPercent(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return 0;
+  return Math.round(Math.min(1, Math.max(0, numericValue)) * 100);
+}
+
 export default function Compare({ compareA, compareB, historyCount = 0, onClearCompare }) {
   if (!compareA || !compareB) {
     const hasOneSelection = Boolean(compareA || compareB);
@@ -102,8 +108,8 @@ export default function Compare({ compareA, compareB, historyCount = 0, onClearC
   };
 
   const DistRow = ({ label, keyName }) => {
-    const valA = Math.round((compareA.distribution?.[keyName] || 0) * 100);
-    const valB = Math.round((compareB.distribution?.[keyName] || 0) * 100);
+    const valA = getPercent(compareA.distribution?.[keyName]);
+    const valB = getPercent(compareB.distribution?.[keyName]);
     const diff = valB - valA;
     const diffColor = diff > 0 ? "text-green-400" : diff < 0 ? "text-red-400" : "text-[#8b949e]";
     const sign = diff > 0 ? "+" : "";

@@ -238,15 +238,24 @@ export default function App() {
       }
 
       const intentDist = data.intent_distribution || {};
-      const total = Object.values(intentDist).reduce((a, b) => a + b, 0) || 1;
+      const getIntentCount = (intent) => {
+        const value = Number(intentDist[intent]);
+        return Number.isFinite(value) && value > 0 ? value : 0;
+      };
+      const growthCount = getIntentCount("EXPANSION");
+      const riskCount = getIntentCount("COST_PRESSURE");
+      const neutralCount =
+        getIntentCount("GENERAL_UPDATE") +
+        getIntentCount("STRATEGIC_PROBING");
+      const total = growthCount + riskCount + neutralCount || 1;
       const mapped = {
         signal: data.final_signal || data.signal,
         score: data.score,
         confidence: data.confidence || 0.8,
         distribution: {
-          growth: (intentDist.EXPANSION || 0) / total,
-          risk: (intentDist.COST_PRESSURE || 0) / total,
-          neutral: (intentDist.GENERAL_UPDATE || 0) / total,
+          growth: growthCount / total,
+          risk: riskCount / total,
+          neutral: neutralCount / total,
         },
         drivers: {
           growth: data.growth_drivers || [],
