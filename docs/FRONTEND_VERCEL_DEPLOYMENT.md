@@ -31,7 +31,7 @@ The committed `frontend_v2/vercel.json` provides a minimal SPA rewrite so direct
 
 ## Environment Variables
 
-Add these variables in the Vercel project settings:
+Add these required variables in the Vercel project settings:
 
 ```text
 VITE_API_BASE_URL=https://financial-pragmatic-ai-production.up.railway.app
@@ -42,6 +42,8 @@ VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 Vite environment variables are injected at build time. Changing any `VITE_*` value requires a new Vercel deployment.
 
 Do not add a Supabase service-role key to Vercel or expose it through a `VITE_*` variable. The browser application should use only the public Supabase URL and anon key.
+
+Complete the schema, RLS policy, and authentication redirect setup in `docs/SUPABASE_SETUP.md` before testing history persistence.
 
 ## Demo Runtime Behavior
 

@@ -54,6 +54,8 @@ Frontend V2:
 - Output directory: `dist`
 - SPA routing config: `frontend_v2/vercel.json`
 - Deployment guide: `docs/FRONTEND_VERCEL_DEPLOYMENT.md`
+- Supabase setup guide: `docs/SUPABASE_SETUP.md`
+- Supabase schema and RLS policies: `supabase/schema.sql`
 - Production backend: Railway at `https://financial-pragmatic-ai-production.up.railway.app`
 - Authentication and analysis history: Supabase
 
@@ -192,7 +194,7 @@ Railway remains the primary backend deployment target.
 - First real `/analyze` request can be slow because Hugging Face model artifacts may need to download.
 - Runtime depends on external Hugging Face availability for model artifacts.
 - `backend/financial_pragmatic_ai/api/server.py` still exists and can confuse deployment if the wrong uvicorn target is used.
-- `frontend_v2` depends on Supabase auth and an `analyses` table.
+- `frontend_v2` depends on Supabase auth and the RLS-protected `analyses` table defined in `supabase/schema.sql`.
 - `frontend_v2` previously hardcoded the backend URL; it now supports `VITE_API_BASE_URL` with a localhost fallback.
 - CORS is currently permissive. This is convenient for local deployment testing but should be narrowed before a production portfolio launch.
 - Some generated report artifacts exist in the workspace and should stay out of source control unless intentionally published.
@@ -203,7 +205,7 @@ Railway remains the primary backend deployment target.
 - No multi-service container orchestration file is present.
 - No CI workflow was detected in this pass.
 - Vercel deployment configuration is present for `frontend_v2`.
-- No Supabase schema/migration file is present for the `analyses` table.
+- Supabase schema and per-user RLS policies are present at `supabase/schema.sql`.
 - `frontend/` still exists as the older CRA app, but `frontend_v2/` is the portfolio canonical UI.
 - Model training and evaluation files are intentionally frozen for now.
 
@@ -211,7 +213,7 @@ Railway remains the primary backend deployment target.
 
 1. Create the Railway backend service using `docs/RAILWAY_BACKEND_DEPLOYMENT.md`.
 2. Deploy `frontend_v2` to Vercel using `docs/FRONTEND_VERCEL_DEPLOYMENT.md`.
-3. Add a Supabase setup note or SQL schema for the `analyses` table.
+3. Apply `supabase/schema.sql` and configure auth redirects using `docs/SUPABASE_SETUP.md`.
 4. Confirm `GET /health` works in the deployed backend before testing `/analyze`.
 5. Configure `VITE_API_BASE_URL` in the frontend host to point at the deployed backend base URL.
 6. Narrow CORS origins once the deployed frontend URL is known.

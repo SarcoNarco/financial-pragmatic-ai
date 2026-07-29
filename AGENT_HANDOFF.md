@@ -25,6 +25,7 @@ This document reflects the **current code in the repository**. Nothing below is 
 - Sprint 6 hardens `/analyze` with batched intent inference, production timing logs, a transcript-size guardrail, a one-request benchmark script, and signal-consistent insight text.
 - Sprint 7 prepares `frontend_v2` for Vercel and adds demo-focused backend status, 90-second request handling, elapsed-time loading feedback, sample transcript input, and clearer errors/empty states.
 - Sprint 8 fixes visible frontend demo polish: the timeline axis label is `Segment`, and distribution rows now use explicit, safe percentage handling.
+- Sprint 9 adds the reproducible Supabase `analyses` schema, per-user RLS policies, setup documentation, and clearer frontend configuration/save diagnostics.
 
 ---
 

@@ -191,7 +191,11 @@ export default function App() {
     }
 
     if (error) {
-      setSaveWarning("Analysis succeeded, but saving to history failed.");
+      console.error(
+        "Supabase analysis save failed:",
+        error.message || "Unknown error",
+      );
+      setSaveWarning("Analysis completed, but saving to history failed.");
       return;
     }
 

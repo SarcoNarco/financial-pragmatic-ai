@@ -1,12 +1,16 @@
 import { useState } from 'react'
-import { supabase } from '../supabaseClient'
+import { isSupabaseConfigured, supabase } from '../supabaseClient'
 import { Mail, Lock, Loader2 } from 'lucide-react'
 
 export default function Auth() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(
+    isSupabaseConfigured
+      ? ''
+      : 'Authentication is unavailable because Supabase environment variables are missing.'
+  )
   const [messageType, setMessageType] = useState('error')
 
   const showMessage = (text, type = 'error') => {
@@ -16,6 +20,7 @@ export default function Auth() {
 
   const handleLogin = async (e) => {
     e.preventDefault()
+    if (!isSupabaseConfigured) return
     setLoading(true)
     setMessage('')
     setMessageType('error')
@@ -30,6 +35,7 @@ export default function Auth() {
 
   const handleSignUp = async (e) => {
     e.preventDefault()
+    if (!isSupabaseConfigured) return
     setLoading(true)
     setMessage('')
     setMessageType('error')
@@ -98,7 +104,7 @@ export default function Auth() {
             <button
               onClick={handleLogin}
               type="button"
-              disabled={loading}
+              disabled={loading || !isSupabaseConfigured}
               className="w-full bg-gradient-to-r from-blue-500 to-blue-700 hover:scale-[1.02] active:scale-95 transition-all py-2.5 rounded font-semibold text-white flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : 'Login'}
@@ -106,7 +112,7 @@ export default function Auth() {
             <button
               onClick={handleSignUp}
               type="button"
-              disabled={loading}
+              disabled={loading || !isSupabaseConfigured}
               className="w-full bg-[#30363d] hover:bg-[#3a4149] py-2.5 rounded font-semibold transition-all text-sm"
             >
               Sign Up
