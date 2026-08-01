@@ -10,6 +10,7 @@ This directory contains the operating, deployment, and portfolio documentation f
 | [Supabase Setup](SUPABASE_SETUP.md) | Auth URL configuration, Vercel variables, database schema, and per-user RLS verification. |
 | [Hugging Face Spaces Deployment](HUGGINGFACE_SPACES_DEPLOYMENT.md) | Optional fallback packaging and deployment path for a Docker Space. |
 | [Portfolio Checklist](PORTFOLIO_CHECKLIST.md) | Final recruiter-demo, deployment, visual asset, and presentation checks. |
+| [Portfolio Screenshots](assets/screenshots/) | Clean public captures of authentication, analysis, timeline/drivers, and comparison workflows. |
 
 Additional source-of-truth files:
 

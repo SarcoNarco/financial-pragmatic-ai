@@ -27,8 +27,10 @@ This document reflects the **current code in the repository**. Nothing below is 
 - Sprint 8 fixes visible frontend demo polish: the timeline axis label is `Segment`, and distribution rows now use explicit, safe percentage handling.
 - Sprint 9 adds the reproducible Supabase `analyses` schema, per-user RLS policies, setup documentation, and clearer frontend configuration/save diagnostics.
 - Sprint 10 packages the repository with a portfolio-grade README, architecture and evaluation narrative, documentation index, and recruiter-demo checklist.
+- Sprint 11 adds clean, privacy-safe portfolio screenshots for authentication, completed analysis, timeline/drivers, and saved-analysis comparison flows.
+- Sprint 11.5 organizes those visual assets in `docs/assets/screenshots/` and presents them in the README and documentation index.
 - The live application architecture is Vercel `frontend_v2` + Railway FastAPI + Hugging Face model artifacts + Supabase auth/history.
-- Next recommended sprint: add clean public screenshots/visual assets or design the contextual RAG layer.
+- Remaining optional polish: a short demo video or GIF and final resume/LinkedIn packaging.
 
 ---
 

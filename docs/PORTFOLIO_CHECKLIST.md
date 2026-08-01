@@ -21,9 +21,10 @@ Use this list before sharing Financial Pragmatic AI with a recruiter, interviewe
 
 ## Demo Readiness
 
-- [ ] Add a clean authentication screenshot.
-- [ ] Add a completed dashboard screenshot with distribution and timeline.
-- [ ] Add a saved-analysis comparison screenshot.
+- [x] Add a clean live frontend authentication screenshot.
+- [x] Add a completed analysis dashboard screenshot with distribution and timeline.
+- [x] Add a saved-analysis comparison screenshot.
+- [x] Confirm public screenshots exclude account identity.
 - [ ] Test the live demo once in a private browser session.
 - [ ] Confirm the first-analysis wait message remains visible during a cold backend start.
 - [ ] Optional: record a short demo video or GIF.

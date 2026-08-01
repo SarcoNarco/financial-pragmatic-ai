@@ -16,6 +16,26 @@ Financial Pragmatic AI is an end-to-end applied NLP portfolio product. It turns 
 
 The hosted backend runs CPU inference and may need to download model artifacts after a cold start. The first analysis can therefore take up to about 60 seconds.
 
+## Screenshots
+
+The following captures use demo data and exclude account identity. The [live demo](https://financial-pragmatic-ai.vercel.app/) remains the interactive reference.
+
+### Authentication
+
+![Authentication screen](docs/assets/screenshots/auth-screen.png)
+
+### Analysis Dashboard
+
+![Analysis dashboard](docs/assets/screenshots/dashboard-overview.png)
+
+### Timeline And Drivers
+
+![Timeline and drivers](docs/assets/screenshots/timeline-drivers.png)
+
+### Compare Mode
+
+![Compare mode](docs/assets/screenshots/compare-mode.png)
+
 ## What It Does
 
 1. Paste an earnings-call transcript or upload a text file.
@@ -161,19 +181,6 @@ NLP_Proj/
 └── AGENT_HANDOFF.md                 # Current engineering decisions and context
 ```
 
-## Screenshots
-
-Clean, portfolio-specific application screenshots are not committed yet. Until they are added, the [live demo](https://financial-pragmatic-ai.vercel.app/) is the canonical visual reference.
-
-Recommended captures for the next visual-assets pass:
-
-- Auth screen.
-- Completed dashboard analysis with distribution and timeline visible.
-- Saved-history sidebar and comparison view.
-- Mobile-width dashboard view.
-
-Generated report screenshots already present in local evaluation output are intentionally not reused here because they are not maintained as public portfolio assets.
-
 ## Known Limitations
 
 - A cold backend can be slow because model artifacts download at runtime and inference runs on CPU.
@@ -188,7 +195,7 @@ Generated report screenshots already present in local evaluation output are inte
 - Cite supporting evidence from filings, news, and prior earnings calls.
 - Improve saved-analysis titles and history management.
 - Optimize model startup, inference latency, and frontend bundle size.
-- Add clean screenshots and an optional short demo video or GIF.
+- Add an optional short demo video or GIF.
 
 ## Project Context
 
