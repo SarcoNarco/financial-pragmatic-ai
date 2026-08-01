@@ -29,7 +29,9 @@ This document reflects the **current code in the repository**. Nothing below is 
 - Sprint 10 packages the repository with a portfolio-grade README, architecture and evaluation narrative, documentation index, and recruiter-demo checklist.
 - Sprint 11 adds clean, privacy-safe portfolio screenshots for authentication, completed analysis, timeline/drivers, and saved-analysis comparison flows.
 - Sprint 11.5 organizes those visual assets in `docs/assets/screenshots/` and presents them in the README and documentation index.
+- Sprint 12 implements smart sampled full-transcript analysis: the hosted Railway demo parses long inputs, analyzes a representative segment budget, and returns sampling metadata for the Vercel UI.
 - The live application architecture is Vercel `frontend_v2` + Railway FastAPI + Hugging Face model artifacts + Supabase auth/history.
+- Future exhaustive long-transcript support should use asynchronous jobs and batch processing rather than expanding the synchronous hosted-demo request.
 - Remaining optional polish: a short demo video or GIF and final resume/LinkedIn packaging.
 
 ---

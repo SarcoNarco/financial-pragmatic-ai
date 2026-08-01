@@ -27,6 +27,7 @@ Use this list before sharing Financial Pragmatic AI with a recruiter, interviewe
 - [x] Confirm public screenshots exclude account identity.
 - [ ] Test the live demo once in a private browser session.
 - [ ] Confirm the first-analysis wait message remains visible during a cold backend start.
+- [ ] Verify one long transcript reports sampled full-transcript metadata after the Railway deployment updates.
 - [ ] Optional: record a short demo video or GIF.
 
 ## Portfolio Presentation

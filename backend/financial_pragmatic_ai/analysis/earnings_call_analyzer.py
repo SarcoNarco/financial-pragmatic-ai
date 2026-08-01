@@ -26,6 +26,16 @@ class EarningsCallAnalyzer:
 
     def analyze(self, transcript, include_details=True):
         segments = self.transcript_analyzer.analyze(transcript)
+        return self._build_analysis_result(segments, include_details=include_details)
+
+    def segment_transcript(self, transcript):
+        return self.transcript_analyzer.segment_transcript(transcript)
+
+    def analyze_segments(self, segments, include_details=True):
+        analyzed_segments = self.transcript_analyzer.analyze_segments(segments)
+        return self._build_analysis_result(analyzed_segments, include_details=include_details)
+
+    def _build_analysis_result(self, segments, include_details=True):
         fallback_used = bool(getattr(self.transcript_analyzer, "last_fallback_used", False))
 
         if not include_details:

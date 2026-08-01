@@ -14,7 +14,7 @@ Financial Pragmatic AI is an end-to-end applied NLP portfolio product. It turns 
 | Backend health | [Railway `/health`](https://financial-pragmatic-ai-production.up.railway.app/health) |
 | Backend version | [Railway `/version`](https://financial-pragmatic-ai-production.up.railway.app/version) |
 
-The hosted backend runs CPU inference and may need to download model artifacts after a cold start. The first analysis can therefore take up to about 60 seconds.
+The hosted backend runs CPU inference and may need to download model artifacts after a cold start. The first analysis can therefore take up to about 60 seconds. Long earnings-call transcripts use representative segment sampling for the hosted demo; this is clearly reported and is not exhaustive full-document analysis.
 
 ## Screenshots
 
@@ -83,6 +83,7 @@ The versioned source values are available in [metrics_summary.json](backend/fina
 - Secure email/password authentication and per-user history through Supabase.
 - RLS-protected history schema with reproducible setup SQL.
 - Transcript paste, text-file upload, and recruiter-friendly sample input.
+- Smart hosted-demo handling for long transcripts through representative segment sampling with explicit metadata.
 - Growth, risk, and neutral distributions with score and confidence reporting.
 - Growth/risk driver extraction and transcript-level event timeline.
 - Side-by-side comparison of saved analyses.
@@ -159,6 +160,7 @@ Deployment guides:
 - [Frontend Vercel Deployment](docs/FRONTEND_VERCEL_DEPLOYMENT.md)
 - [Supabase Setup](docs/SUPABASE_SETUP.md)
 - [Deployment Audit](docs/DEPLOYMENT_AUDIT.md)
+- [Full-Transcript Strategy](docs/FULL_TRANSCRIPT_STRATEGY.md)
 - [Documentation Index](docs/README.md)
 
 Hugging Face Spaces packaging remains documented as an optional fallback; Railway is the active backend target.
@@ -184,7 +186,8 @@ NLP_Proj/
 ## Known Limitations
 
 - A cold backend can be slow because model artifacts download at runtime and inference runs on CPU.
-- The hosted demo rejects transcripts above the configured length limit, currently 20,000 characters by default.
+- Long transcript results may represent a sampled segment budget rather than every source segment; see [Full-Transcript Strategy](docs/FULL_TRANSCRIPT_STRATEGY.md).
+- The hosted demo samples inputs above 20,000 characters and rejects only requests above its configurable 250,000-character absolute safety cap by default.
 - Runtime inference depends on outbound access to Hugging Face model artifacts.
 - The app provides analytical signals for research and demonstration, not investment recommendations.
 - `frontend_v2/` is canonical; the older `frontend/` remains only for legacy/reference purposes.
@@ -196,6 +199,7 @@ NLP_Proj/
 - Improve saved-analysis titles and history management.
 - Optimize model startup, inference latency, and frontend bundle size.
 - Add an optional short demo video or GIF.
+- For exhaustive long-document workflows, add asynchronous batch processing with persisted progress and results.
 
 ## Project Context
 

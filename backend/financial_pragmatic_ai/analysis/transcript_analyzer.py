@@ -499,7 +499,7 @@ class TranscriptAnalyzer:
         score = compute_risk_score(intents)
         return derive_signal(score)
 
-    def analyze(self, raw_text):
+    def segment_transcript(self, raw_text):
         parsing_started = perf_counter()
         segments = self._build_segments(raw_text)
         logger.info(
@@ -508,6 +508,10 @@ class TranscriptAnalyzer:
             len(raw_text),
             len(segments),
         )
+        return segments
+
+    def analyze_segments(self, segments):
+        """Classify already-segmented transcript content without re-parsing it."""
         results = []
         embeddings = []
         fallback_used = False
@@ -519,11 +523,14 @@ class TranscriptAnalyzer:
             logger.debug("Model intent=%s speaker=%s", intent, seg["speaker"])
             fallback_used = fallback_used or bool(prediction.get("fallback_used", False))
 
-            results.append({
+            result = {
                 "speaker": seg["speaker"],
                 "text": seg["text"],
                 "intent": intent,
-            })
+            }
+            if "source_index" in seg:
+                result["source_index"] = seg["source_index"]
+            results.append(result)
             if prediction["embedding"] is not None:
                 embeddings.append(prediction["embedding"])
 
@@ -542,6 +549,9 @@ class TranscriptAnalyzer:
         logger.debug("Intent distribution=%s", dict(intent_distribution))
 
         return results
+
+    def analyze(self, raw_text):
+        return self.analyze_segments(self.segment_transcript(raw_text))
 
     @property
     def last_fallback_used(self) -> bool:

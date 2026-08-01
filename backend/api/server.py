@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from api.schemas import CompareRequest, TranscriptRequest
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
+from financial_pragmatic_ai.analysis.segment_sampler import select_representative_segments
 from financial_pragmatic_ai.analysis.financial_signal_engine import (
     compute_confidence,
     compute_intent_distribution,
@@ -31,7 +32,9 @@ logger = logging.getLogger(__name__)
 APP_NAME = "financial-pragmatic-ai-api"
 API_ENTRYPOINT = "backend/api/server.py"
 MODEL_NAME = "SarcoNarco/finbert_intent_v3"
-DEFAULT_MAX_TRANSCRIPT_CHARS = 20_000
+DEFAULT_MAX_DIRECT_TRANSCRIPT_CHARS = 20_000
+DEFAULT_MAX_FULL_TRANSCRIPT_CHARS = 250_000
+DEFAULT_FULL_TRANSCRIPT_SEGMENT_BUDGET = 32
 
 
 def _positive_int_env(name: str, default: int) -> int:
@@ -49,9 +52,17 @@ def _positive_int_env(name: str, default: int) -> int:
     return value
 
 
-MAX_TRANSCRIPT_CHARS = _positive_int_env(
-    "MAX_TRANSCRIPT_CHARS",
-    DEFAULT_MAX_TRANSCRIPT_CHARS,
+MAX_DIRECT_TRANSCRIPT_CHARS = _positive_int_env(
+    "MAX_DIRECT_TRANSCRIPT_CHARS",
+    _positive_int_env("MAX_TRANSCRIPT_CHARS", DEFAULT_MAX_DIRECT_TRANSCRIPT_CHARS),
+)
+MAX_FULL_TRANSCRIPT_CHARS = _positive_int_env(
+    "MAX_FULL_TRANSCRIPT_CHARS",
+    DEFAULT_MAX_FULL_TRANSCRIPT_CHARS,
+)
+FULL_TRANSCRIPT_SEGMENT_BUDGET = _positive_int_env(
+    "FULL_TRANSCRIPT_SEGMENT_BUDGET",
+    DEFAULT_FULL_TRANSCRIPT_SEGMENT_BUDGET,
 )
 
 app = FastAPI(title="Financial Pragmatic AI API")
@@ -111,11 +122,12 @@ def _get_analyzer() -> EarningsCallAnalyzer:
 
 def _validate_transcript(transcript: str) -> None:
     transcript_chars = len(transcript)
-    if transcript_chars > MAX_TRANSCRIPT_CHARS:
+    if transcript_chars > MAX_FULL_TRANSCRIPT_CHARS:
         raise HTTPException(
             status_code=413,
             detail=(
-                f"Transcript exceeds the {MAX_TRANSCRIPT_CHARS} character limit "
+                "Transcript exceeds the hosted demo's absolute "
+                f"{MAX_FULL_TRANSCRIPT_CHARS} character safety limit "
                 f"({transcript_chars} received)."
             ),
         )
@@ -124,8 +136,37 @@ def _validate_transcript(transcript: str) -> None:
 def _run_analysis(transcript: str):
     _validate_transcript(transcript)
     service_analyzer = _get_analyzer()
+    transcript_chars = len(transcript)
+    sampled = transcript_chars > MAX_DIRECT_TRANSCRIPT_CHARS
 
-    result = service_analyzer.analyze(transcript, include_details=False)
+    if sampled:
+        full_segments = service_analyzer.segment_transcript(transcript)
+        selected_segments = select_representative_segments(
+            full_segments,
+            FULL_TRANSCRIPT_SEGMENT_BUDGET,
+        )
+        result = service_analyzer.analyze_segments(
+            selected_segments,
+            include_details=False,
+        )
+        segments_total = len(full_segments)
+        segments_analyzed = len(selected_segments)
+        actually_sampled = segments_analyzed < segments_total
+        analysis_mode = "sampled_full_transcript"
+        sampling_note = (
+            "Hosted demo analyzed a representative subset of the full transcript "
+            "for performance."
+            if actually_sampled
+            else None
+        )
+    else:
+        result = service_analyzer.analyze(transcript, include_details=False)
+        segments_total = len(result["segments"])
+        segments_analyzed = segments_total
+        actually_sampled = False
+        analysis_mode = "standard"
+        sampling_note = None
+
     segments = result["segments"]
     fallback_used = bool(result.get("fallback_used", False))
     if len(segments) == 0:
@@ -181,7 +222,7 @@ def _run_analysis(transcript: str):
     timeline_started = perf_counter()
     timeline = [
         {
-            "step": i,
+            "step": seg.get("source_index", i),
             "value": _INTENT_VALUE.get(seg["intent"], 0),
             "intent": seg["intent"],
             "label": seg["text"][:60],
@@ -210,6 +251,13 @@ def _run_analysis(transcript: str):
         "drivers": drivers,
         "timeline": timeline,
         "fallback_used": fallback_used,
+        "analysis_mode": analysis_mode,
+        "sampled": actually_sampled,
+        "segments_total": segments_total,
+        "segments_analyzed": segments_analyzed,
+        "segment_budget": FULL_TRANSCRIPT_SEGMENT_BUDGET if sampled else None,
+        "sampling_note": sampling_note,
+        "transcript_chars": transcript_chars,
     }
 
 

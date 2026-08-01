@@ -11,6 +11,7 @@ This directory contains the operating, deployment, and portfolio documentation f
 | [Hugging Face Spaces Deployment](HUGGINGFACE_SPACES_DEPLOYMENT.md) | Optional fallback packaging and deployment path for a Docker Space. |
 | [Portfolio Checklist](PORTFOLIO_CHECKLIST.md) | Final recruiter-demo, deployment, visual asset, and presentation checks. |
 | [Portfolio Screenshots](assets/screenshots/) | Clean public captures of authentication, analysis, timeline/drivers, and comparison workflows. |
+| [Full-Transcript Strategy](FULL_TRANSCRIPT_STRATEGY.md) | Representative segment sampling for long hosted-demo inputs, metadata, and benchmarking. |
 
 Additional source-of-truth files:
 

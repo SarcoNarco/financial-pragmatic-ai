@@ -60,14 +60,19 @@ Optional backend environment variables:
 ```text
 PORT=8000
 HF_HOME=/tmp/hf_cache
-MAX_TRANSCRIPT_CHARS=20000
+MAX_DIRECT_TRANSCRIPT_CHARS=20000
+FULL_TRANSCRIPT_SEGMENT_BUDGET=32
+MAX_FULL_TRANSCRIPT_CHARS=250000
 ```
 
 Notes:
 
 - `PORT` is normally injected by Railway.
 - `HF_HOME` defaults to `/tmp/hf_cache` in `backend/api/server.py` and in the Docker image.
-- `MAX_TRANSCRIPT_CHARS` defaults to `20000`; requests above the configured limit return HTTP 413 before model initialization or inference.
+- `MAX_DIRECT_TRANSCRIPT_CHARS` defaults to `20000`; longer inputs enter representative sampled full-transcript mode instead of being rejected.
+- `FULL_TRANSCRIPT_SEGMENT_BUDGET` defaults to `32`; keep it modest on Railway Hobby because it determines the maximum long-transcript inference work.
+- `MAX_FULL_TRANSCRIPT_CHARS` defaults to `250000` and remains the absolute safety limit. Requests above it return HTTP 413 before model initialization or inference.
+- `MAX_TRANSCRIPT_CHARS` is accepted as a legacy alias for `MAX_DIRECT_TRANSCRIPT_CHARS`.
 - No fake secrets are required for the backend service.
 - Supabase remains the auth/history database for `frontend_v2`; do not add a Railway database for this backend unless the architecture intentionally changes.
 
@@ -152,6 +157,7 @@ curl http://localhost:8000/health
 curl http://localhost:8000/version
 BASE_URL=http://localhost:8000 python backend/scripts/smoke_backend.py
 BASE_URL=http://localhost:8000 python backend/scripts/benchmark_analyze.py
+BASE_URL=http://localhost:8000 python backend/scripts/benchmark_transcript_file.py path/to/transcript.txt
 ```
 
 The benchmark script sends exactly one tiny `/analyze` request and prints elapsed seconds plus the key response fields. Against Railway, run:
@@ -159,6 +165,8 @@ The benchmark script sends exactly one tiny `/analyze` request and prints elapse
 ```bash
 BASE_URL=https://YOUR-RAILWAY-BACKEND-DOMAIN python backend/scripts/benchmark_analyze.py
 ```
+
+For a deliberate long-input check, use `benchmark_transcript_file.py` once and inspect its `analysis_mode`, `segments_total`, and `segments_analyzed` output. Do not repeatedly benchmark huge transcripts on Railway.
 
 On Apple Silicon, Docker may print an expected platform warning because the image targets `linux/amd64` for compatibility with the pinned CPU PyTorch wheel.
 
@@ -206,7 +214,7 @@ Check the `timing stage=...` log lines to separate analyzer initialization, pars
 
 ### Analysis request returns HTTP 413
 
-The transcript exceeded `MAX_TRANSCRIPT_CHARS`, which defaults to `20000`. Raise the limit only when the deployment has enough CPU, memory, and request-time budget for larger transcripts.
+The transcript exceeded `MAX_FULL_TRANSCRIPT_CHARS`, which defaults to `250000`. Long inputs above `MAX_DIRECT_TRANSCRIPT_CHARS` should otherwise use sampled full-transcript mode; do not raise the absolute cap without accounting for parsing, CPU, memory, and request-time limits.
 
 ### Hugging Face download fails
 

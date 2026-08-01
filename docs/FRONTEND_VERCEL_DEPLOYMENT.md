@@ -52,6 +52,8 @@ Complete the schema, RLS policy, and authentication redirect setup in `docs/SUPA
 - A demo analysis may take up to about 60 seconds.
 - The frontend allows up to 90 seconds before aborting an analysis request.
 - The frontend does not automatically retry `/analyze`.
+- Long transcript input shows a pre-submit sampling note. When the backend samples, the result states how many transcript segments were analyzed.
+- The frontend reads sampling metadata immediately from the API response; existing Supabase history rows remain backward-compatible and do not persist that metadata in this sprint.
 
 ## Post-Deploy Verification
 
@@ -64,6 +66,7 @@ Complete the schema, RLS policy, and authentication redirect setup in `docs/SUPA
 7. Confirm the analysis appears in recent history.
 8. Create a second analysis and verify Compare mode guidance and selection.
 9. Refresh the deployed page and confirm the SPA still loads.
+10. Paste one long transcript only when deliberately validating sampled mode, then confirm the result identifies the analyzed segment count. Do not repeatedly benchmark large transcripts on Railway.
 
 ## CORS Note
 

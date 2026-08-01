@@ -34,7 +34,9 @@ Backend:
 
 - No backend environment variables are required for local startup at this time.
 - `HF_HOME` is set in `backend/api/server.py` with a default of `/tmp/hf_cache`.
-- `MAX_TRANSCRIPT_CHARS` is optional and defaults to `20000` for deployed request guardrails.
+- `MAX_DIRECT_TRANSCRIPT_CHARS` is optional and defaults to `20000`; longer inputs use representative sampling instead of a direct-analysis path.
+- `FULL_TRANSCRIPT_SEGMENT_BUDGET` is optional and defaults to `32` for hosted sampled analysis.
+- `MAX_FULL_TRANSCRIPT_CHARS` is optional and defaults to `250000` as the absolute synchronous request safety cap.
 - Model artifacts are downloaded from Hugging Face at runtime.
 
 Frontend V2:
@@ -120,7 +122,7 @@ Recommended Railway backend settings:
 - Supabase remains the auth/history database.
 - Ensure outbound network access is available for Hugging Face model downloads.
 - Use `/health` and `/version` for deployment checks. Avoid repeated `/analyze` load tests during deployment because first model load can be slow and resource-heavy.
-- Use `backend/scripts/benchmark_analyze.py` for a single timed `/analyze` check; start demo inference at 2 vCPU / 4 GB with one replica.
+- Use `backend/scripts/benchmark_analyze.py` for a single tiny timed `/analyze` check and `backend/scripts/benchmark_transcript_file.py` for one deliberate transcript-file check; start demo inference at 2 vCPU / 4 GB with one replica.
 
 Validate deployed backend with:
 
@@ -193,6 +195,7 @@ Railway remains the primary backend deployment target.
 - The backend imports the ML stack at app import time, but model inference objects are lazily instantiated only when analysis runs.
 - First real `/analyze` request can be slow because Hugging Face model artifacts may need to download.
 - Runtime depends on external Hugging Face availability for model artifacts.
+- Long transcripts are segmented in full but only a representative budget is inferred synchronously; the response must be presented as sampled rather than exhaustive.
 - `backend/financial_pragmatic_ai/api/server.py` still exists and can confuse deployment if the wrong uvicorn target is used.
 - `frontend_v2` depends on Supabase auth and the RLS-protected `analyses` table defined in `supabase/schema.sql`.
 - `frontend_v2` previously hardcoded the backend URL; it now supports `VITE_API_BASE_URL` with a localhost fallback.
@@ -208,6 +211,7 @@ Railway remains the primary backend deployment target.
 - Supabase schema and per-user RLS policies are present at `supabase/schema.sql`.
 - `frontend/` still exists as the older CRA app, but `frontend_v2/` is the portfolio canonical UI.
 - Model training and evaluation files are intentionally frozen for now.
+- Exhaustive full-transcript inference is not a hosted-demo capability. See `docs/FULL_TRANSCRIPT_STRATEGY.md`.
 
 ## Next Recommended Deployment Steps
 

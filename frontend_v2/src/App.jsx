@@ -12,6 +12,7 @@ const API_BASE_URL = (
 const API_URL = `${API_BASE_URL}/analyze`;
 const HEALTH_URL = `${API_BASE_URL}/health`;
 const ANALYZE_TIMEOUT_MS = 90_000;
+const LONG_TRANSCRIPT_CHAR_THRESHOLD = 20_000;
 const SAMPLE_TRANSCRIPT =
   "CEO: Revenue grew 12 percent this quarter as enterprise demand improved. " +
   "CFO: Margins improved due to better operating discipline, although cloud costs remain a pressure point. " +
@@ -19,7 +20,7 @@ const SAMPLE_TRANSCRIPT =
 
 function getResponseError(status) {
   if (status === 413) {
-    return "This transcript is too long for the demo. Please shorten it and try again.";
+    return "This transcript exceeds the hosted demo's absolute safety limit. Please shorten it and try again.";
   }
   if ([408, 502, 503, 504].includes(status)) {
     return "Backend is reachable but analysis took too long. Please try a shorter transcript.";
@@ -153,6 +154,12 @@ export default function App() {
     typeof result?.confidence === "number"
       ? `${(result.confidence <= 1 ? result.confidence * 100 : result.confidence).toFixed(1)}%`
       : "85.0%";
+  const sampledSegmentsAnalyzed = Number(result?.segments_analyzed);
+  const sampledSegmentsTotal = Number(result?.segments_total);
+  const showSampledTranscriptNote =
+    Boolean(result?.sampled) &&
+    Number.isFinite(sampledSegmentsAnalyzed) &&
+    Number.isFinite(sampledSegmentsTotal);
 
   const heroGlowClass =
     signal === "growth"
@@ -266,6 +273,13 @@ export default function App() {
           risk: data.risk_drivers || [],
         },
         timeline: data.timeline || [],
+        analysis_mode: data.analysis_mode || "standard",
+        sampled: Boolean(data.sampled),
+        segments_total: data.segments_total,
+        segments_analyzed: data.segments_analyzed,
+        segment_budget: data.segment_budget,
+        sampling_note: data.sampling_note || null,
+        transcript_chars: data.transcript_chars,
       };
 
       setResult(mapped);
@@ -366,6 +380,15 @@ export default function App() {
               placeholder="Enter financial transcript..."
             />
 
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#8b949e]">
+              <span>{transcript.length.toLocaleString()} characters</span>
+              {transcript.length > LONG_TRANSCRIPT_CHAR_THRESHOLD ? (
+                <span className="text-blue-300">
+                  Long transcript detected. The hosted demo may analyze a representative subset for speed.
+                </span>
+              ) : null}
+            </div>
+
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 className="min-w-[138px] bg-gradient-to-r from-blue-500 to-blue-700 hover:scale-[1.02] active:scale-95 transition-all duration-300 px-5 py-2 rounded font-semibold disabled:opacity-60 disabled:hover:scale-100 flex items-center justify-center gap-2"
@@ -456,6 +479,15 @@ export default function App() {
               <span className="text-[#c9d1d9]">{confidenceText}</span>
             </div>
           </div>
+
+          {showSampledTranscriptNote ? (
+            <div
+              className="mb-4 border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-100 rounded-lg"
+              role="status"
+            >
+              Sampled full-transcript analysis: analyzed {sampledSegmentsAnalyzed} of {sampledSegmentsTotal} transcript segments for hosted-demo performance.
+            </div>
+          ) : null}
 
           <div className="flex justify-between items-center mb-3 mt-4">
             <div className="text-sm font-medium text-[#8b949e] italic transition-opacity tracking-wide pl-2">
