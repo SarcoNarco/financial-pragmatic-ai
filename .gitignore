@@ -9,6 +9,9 @@ __pycache__/
 .env.*.local
 .pytest_cache/
 
+# Local agent/tooling configuration
+.agents/
+
 .venv/
 env/
 venv/
