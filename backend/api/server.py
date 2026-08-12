@@ -7,6 +7,7 @@ os.environ.setdefault("HF_HOME", "/tmp/hf_cache")
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from api.document_ingestion import DocumentExtractionError, extract_transcript_text
 from api.schemas import CompareRequest, TranscriptRequest
 from financial_pragmatic_ai.analysis.earnings_call_analyzer import EarningsCallAnalyzer
 from financial_pragmatic_ai.analysis.segment_sampler import select_representative_segments
@@ -285,34 +286,15 @@ async def upload_transcript(
     file: UploadFile = File(...),
 ):
     content = await file.read()
-    filename = file.filename.lower()
+    try:
+        text = extract_transcript_text(file.filename, content)
+    except DocumentExtractionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    if filename.endswith(".pdf"):
-        import io
-        import pdfplumber
-
-        try:
-            with pdfplumber.open(io.BytesIO(content)) as pdf:
-                pages = []
-                for page in pdf.pages:
-                    text = page.extract_text()
-                    if text:
-                        pages.append(text)
-
-            text = "\n".join(pages)
-        except Exception as exc:
-            return {"error": f"PDF parsing failed: {str(exc)}"}
-    elif filename.endswith(".txt"):
-        try:
-            text = content.decode("utf-8")
-        except Exception:
-            return {"error": "TXT file must be UTF-8 encoded"}
-    else:
-        return {"error": "Only .txt and .pdf files are supported"}
-
-    text = text.replace("\n\n", "\n")
-    text = text.strip()
-    return _run_analysis(text)
+    result = _run_analysis(text)
+    # The frontend persists the source transcript in its existing history row.
+    # Returning it here avoids a separate client-side parser for PDF/DOCX files.
+    return {**result, "transcript": text}
 
 
 @app.post("/compare")

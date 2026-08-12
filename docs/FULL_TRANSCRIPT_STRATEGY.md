@@ -44,6 +44,12 @@ The Vercel frontend shows a calm result note only when `sampled` is true:
 
 The current Supabase history schema intentionally stores the existing core result fields only. Sampling metadata is visible for the immediate result but is not retained when an older history item is re-opened; this avoids a schema migration and keeps deployed history compatible.
 
+## Document Uploads
+
+`POST /upload` converts supported documents to plain transcript text before using the exact same analysis path as `POST /analyze`. Supported formats are TXT, PDF, and DOCX. PDF extraction uses the existing text parser and DOCX extraction reads non-empty paragraphs in source order; neither path performs OCR.
+
+Legacy Microsoft Word `.doc` files are intentionally unsupported. Converting them reliably needs platform-specific tooling that is unsuitable for the Railway deployment. The upload response includes the extracted `transcript` so the frontend can preserve its existing Supabase history behavior without a schema change.
+
 ## Configuration
 
 ```text

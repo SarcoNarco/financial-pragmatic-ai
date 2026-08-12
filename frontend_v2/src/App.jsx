@@ -11,6 +11,7 @@ const API_BASE_URL = (
 ).replace(/\/+$/, "");
 const API_URL = `${API_BASE_URL}/analyze`;
 const HEALTH_URL = `${API_BASE_URL}/health`;
+const UPLOAD_URL = `${API_BASE_URL}/upload`;
 const ANALYZE_TIMEOUT_MS = 90_000;
 const LONG_TRANSCRIPT_CHAR_THRESHOLD = 20_000;
 const SAMPLE_TRANSCRIPT =
@@ -26,6 +27,54 @@ function getResponseError(status) {
     return "Backend is reachable but analysis took too long. Please try a shorter transcript.";
   }
   return "Analysis failed on the backend. Please try again.";
+}
+
+async function getBackendError(response) {
+  try {
+    const body = await response.json();
+    if (typeof body?.detail === "string") return body.detail;
+    if (typeof body?.error === "string") return body.error;
+  } catch {
+    // Fall back to the consistent HTTP-status message below.
+  }
+  return getResponseError(response.status);
+}
+
+function mapAnalysisResult(data) {
+  const intentDist = data.intent_distribution || {};
+  const getIntentCount = (intent) => {
+    const value = Number(intentDist[intent]);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  };
+  const growthCount = getIntentCount("EXPANSION");
+  const riskCount = getIntentCount("COST_PRESSURE");
+  const neutralCount =
+    getIntentCount("GENERAL_UPDATE") +
+    getIntentCount("STRATEGIC_PROBING");
+  const total = growthCount + riskCount + neutralCount || 1;
+
+  return {
+    signal: data.final_signal || data.signal,
+    score: data.score,
+    confidence: data.confidence || 0.8,
+    distribution: {
+      growth: growthCount / total,
+      risk: riskCount / total,
+      neutral: neutralCount / total,
+    },
+    drivers: {
+      growth: data.growth_drivers || [],
+      risk: data.risk_drivers || [],
+    },
+    timeline: data.timeline || [],
+    analysis_mode: data.analysis_mode || "standard",
+    sampled: Boolean(data.sampled),
+    segments_total: data.segments_total,
+    segments_analyzed: data.segments_analyzed,
+    segment_budget: data.segment_budget,
+    sampling_note: data.sampling_note || null,
+    transcript_chars: data.transcript_chars,
+  };
 }
 
 export default function App() {
@@ -168,7 +217,7 @@ export default function App() {
         ? "shadow-[0_0_20px_rgba(255,77,79,0.2)]"
         : "shadow-[0_0_20px_rgba(88,166,255,0.2)]";
 
-  const saveAnalysis = async (mapped) => {
+  const saveAnalysis = async (mapped, transcriptToSave = transcript) => {
     if (!session?.user) return;
 
     let error;
@@ -187,7 +236,7 @@ export default function App() {
     } else {
       ({ error } = await supabase.from("analyses").insert({
         user_id: session.user.id,
-        transcript,
+        transcript: transcriptToSave,
         signal: mapped.signal,
         score: mapped.score,
         distribution: mapped.distribution,
@@ -239,48 +288,14 @@ export default function App() {
         signal: controller.signal,
       });
 
-      if (!response.ok) {
-        throw new Error(getResponseError(response.status));
-      }
+      if (!response.ok) throw new Error(await getBackendError(response));
 
       const data = await response.json();
       if (data?.error) {
         throw new Error("The backend could not analyze this transcript. Please try a shorter sample.");
       }
 
-      const intentDist = data.intent_distribution || {};
-      const getIntentCount = (intent) => {
-        const value = Number(intentDist[intent]);
-        return Number.isFinite(value) && value > 0 ? value : 0;
-      };
-      const growthCount = getIntentCount("EXPANSION");
-      const riskCount = getIntentCount("COST_PRESSURE");
-      const neutralCount =
-        getIntentCount("GENERAL_UPDATE") +
-        getIntentCount("STRATEGIC_PROBING");
-      const total = growthCount + riskCount + neutralCount || 1;
-      const mapped = {
-        signal: data.final_signal || data.signal,
-        score: data.score,
-        confidence: data.confidence || 0.8,
-        distribution: {
-          growth: growthCount / total,
-          risk: riskCount / total,
-          neutral: neutralCount / total,
-        },
-        drivers: {
-          growth: data.growth_drivers || [],
-          risk: data.risk_drivers || [],
-        },
-        timeline: data.timeline || [],
-        analysis_mode: data.analysis_mode || "standard",
-        sampled: Boolean(data.sampled),
-        segments_total: data.segments_total,
-        segments_analyzed: data.segments_analyzed,
-        segment_budget: data.segment_budget,
-        sampling_note: data.sampling_note || null,
-        transcript_chars: data.transcript_chars,
-      };
+      const mapped = mapAnalysisResult(data);
 
       setResult(mapped);
       setBackendStatus("online");
@@ -319,21 +334,71 @@ export default function App() {
     if (!loading) fileInputRef.current?.click();
   };
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const content = typeof reader.result === "string" ? reader.result : "";
-      setTranscript(content);
+    if (file.name.toLowerCase().endsWith(".doc")) {
+      setAnalysisError(
+        "Legacy Microsoft Word (.doc) files aren't supported.\nPlease save the file as .docx and upload again.",
+      );
+      event.target.value = "";
+      return;
+    }
+
+    setLoading(true);
+    setAnalysisError("");
+    setSaveWarning("");
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      ANALYZE_TIMEOUT_MS,
+    );
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(UPLOAD_URL, {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) throw new Error(await getBackendError(response));
+
+      const data = await response.json();
+      if (data?.error) {
+        throw new Error("The backend could not analyze this transcript. Please try a shorter sample.");
+      }
+
+      const mapped = mapAnalysisResult(data);
+
+      const extractedTranscript =
+        typeof data.transcript === "string" ? data.transcript : "";
+      setTranscript(extractedTranscript);
       setUploadedFileName(file.name);
-      setAnalysisError("");
-      setSaveWarning("");
+      setResult(mapped);
+      setBackendStatus("online");
       setIsFromHistory(false);
       setSelectedAnalysis(null);
-    };
-    reader.readAsText(file);
+      await saveAnalysis(mapped, extractedTranscript);
+    } catch (error) {
+      setResult(null);
+      if (error?.name === "AbortError") {
+        setAnalysisError(
+          "Backend is reachable but analysis took too long. Please try a shorter transcript.",
+        );
+      } else if (error instanceof TypeError) {
+        setBackendStatus("unavailable");
+        setAnalysisError("Could not reach the backend. Check deployment status.");
+      } else {
+        setAnalysisError(error?.message || "Upload failed. Please try again.");
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
+      setLoading(false);
+      event.target.value = "";
+    }
   };
 
   if (!session) return <Auth />;
@@ -362,7 +427,7 @@ export default function App() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".txt"
+              accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -434,6 +499,10 @@ export default function App() {
               </span>
             </div>
 
+            <div className="mt-2 text-xs text-[#8b949e]">
+              Upload transcript (.txt, .pdf, or .docx)
+            </div>
+
             {uploadedFileName ? (
               <div className="mt-2 text-xs text-[#8b949e]">
                 Uploaded: {uploadedFileName}
@@ -442,7 +511,7 @@ export default function App() {
 
             {analysisError ? (
               <div
-                className="mt-3 p-3 rounded border border-red-500/30 bg-red-500/10 text-red-300 text-sm"
+                className="mt-3 p-3 rounded border border-red-500/30 bg-red-500/10 text-red-300 text-sm whitespace-pre-line"
                 role="alert"
               >
                 {analysisError}

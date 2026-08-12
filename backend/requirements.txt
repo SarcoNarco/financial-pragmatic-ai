@@ -18,9 +18,10 @@ pandas==2.2.2
 # Required at import-time by current runtime modules
 datasets==2.20.0
 
-# FastAPI file upload support (/upload) and PDF parsing
+# FastAPI file upload support (/upload) plus PDF and DOCX text extraction
 python-multipart==0.0.9
 pdfplumber==0.11.1
+python-docx==1.1.2
 
 # Prevent protobuf-related runtime issues in transformer stack
 protobuf==4.25.3

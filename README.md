@@ -38,7 +38,7 @@ The following captures use demo data and exclude account identity. The [live dem
 
 ## What It Does
 
-1. Paste an earnings-call transcript or upload a text file.
+1. Paste an earnings-call transcript or upload a TXT, PDF, or DOCX file.
 2. Segment the conversation and classify pragmatic intents such as expansion, cost pressure, general updates, and strategic probing.
 3. Aggregate the transcript into a growth, risk, or neutral market signal.
 4. Present a score, confidence, intent distribution, and timeline-derived trend or volatility view.
@@ -82,7 +82,7 @@ The versioned source values are available in [metrics_summary.json](backend/fina
 
 - Secure email/password authentication and per-user history through Supabase.
 - RLS-protected history schema with reproducible setup SQL.
-- Transcript paste, text-file upload, and recruiter-friendly sample input.
+- Transcript paste, TXT/PDF/DOCX upload, and recruiter-friendly sample input.
 - Smart hosted-demo handling for long transcripts through representative segment sampling with explicit metadata.
 - Growth, risk, and neutral distributions with score and confidence reporting.
 - Growth/risk driver extraction and transcript-level event timeline.
@@ -188,6 +188,7 @@ NLP_Proj/
 - A cold backend can be slow because model artifacts download at runtime and inference runs on CPU.
 - Long transcript results may represent a sampled segment budget rather than every source segment; see [Full-Transcript Strategy](docs/FULL_TRANSCRIPT_STRATEGY.md).
 - The hosted demo samples inputs above 20,000 characters and rejects only requests above its configurable 250,000-character absolute safety cap by default.
+- Uploads support TXT, PDF, and DOCX text extraction only. Legacy `.doc` files are intentionally unsupported because their conversion needs platform-specific tools unsuitable for Railway.
 - Runtime inference depends on outbound access to Hugging Face model artifacts.
 - The app provides analytical signals for research and demonstration, not investment recommendations.
 - `frontend_v2/` is canonical; the older `frontend/` remains only for legacy/reference purposes.

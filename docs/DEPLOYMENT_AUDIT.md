@@ -91,6 +91,12 @@ Version endpoint behavior:
 
 - `GET /version` returns app name, canonical API entrypoint, model name, and hardening status.
 
+Upload behavior:
+
+- `POST /upload` accepts TXT, PDF, and DOCX files, extracts plain transcript text, then uses the same analysis path as pasted input.
+- PDF and DOCX extraction are text-only; OCR is intentionally out of scope.
+- The existing extracted-transcript safety cap still applies after upload extraction. Legacy `.doc` files are intentionally unsupported because reliable conversion needs platform-specific tooling unsuitable for Railway.
+
 ## Railway Notes
 
 Railway is the primary backend deployment target for the portfolio demo.

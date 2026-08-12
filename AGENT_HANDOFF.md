@@ -30,6 +30,7 @@ This document reflects the **current code in the repository**. Nothing below is 
 - Sprint 11 adds clean, privacy-safe portfolio screenshots for authentication, completed analysis, timeline/drivers, and saved-analysis comparison flows.
 - Sprint 11.5 organizes those visual assets in `docs/assets/screenshots/` and presents them in the README and documentation index.
 - Sprint 12 implements smart sampled full-transcript analysis: the hosted Railway demo parses long inputs, analyzes a representative segment budget, and returns sampling metadata for the Vercel UI.
+- Sprint 13 adds canonical TXT/PDF/DOCX ingestion through `POST /upload`; documents are converted to transcript text before the existing analysis pipeline, while legacy `.doc` files remain intentionally unsupported for Railway portability.
 - The live application architecture is Vercel `frontend_v2` + Railway FastAPI + Hugging Face model artifacts + Supabase auth/history.
 - Future exhaustive long-transcript support should use asynchronous jobs and batch processing rather than expanding the synchronous hosted-demo request.
 - Remaining optional polish: a short demo video or GIF and final resume/LinkedIn packaging.
@@ -209,8 +210,8 @@ Returned keys from `/analyze` currently:
 - `fallback_used`
 
 `/upload`:
-- Supports `.txt` and `.pdf`.
-- Parses text, then calls same `_run_analysis`.
+- Supports `.txt`, `.pdf`, and `.docx`; legacy `.doc` is intentionally rejected.
+- Extracts plain text, then calls the same `_run_analysis` path used by pasted transcripts.
 
 `/compare`:
 - Runs `_run_analysis` on two transcripts.
@@ -432,7 +433,7 @@ Saved artifacts currently present:
 - Uses Supabase auth and Supabase table `analyses` for history/compare selection.
 - `App.jsx` gates app via session (`if !session return <Auth />`).
 - Analyze action calls backend `/analyze` and maps response.
-- File upload in `frontend_v2` reads local `.txt` into textarea; it does **not** call backend `/upload`.
+- File upload in `frontend_v2` sends supported TXT/PDF/DOCX files to canonical backend `/upload`, then stores the returned extracted transcript in the existing history flow.
 - Compare tab uses two selected history records from Supabase (not backend `/compare` endpoint).
 
 Implication:
